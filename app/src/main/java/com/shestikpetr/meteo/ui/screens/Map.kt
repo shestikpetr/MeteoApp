@@ -44,6 +44,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberStandardBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -60,9 +61,8 @@ import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
-import com.shestikpetr.meteo.data.Datasource.placemarks
-import com.shestikpetr.meteo.data.Datasource.startPosition
 import com.shestikpetr.meteo.ui.Parameters
+import com.shestikpetr.meteo.data.StationWithLocation
 import com.shestikpetr.meteo.ui.navigation.Screen
 import kotlinx.coroutines.launch
 import ru.sulgik.mapkit.compose.Placemark
@@ -74,18 +74,47 @@ import ru.sulgik.mapkit.compose.rememberPlacemarkState
 import ru.sulgik.mapkit.geometry.Point
 import ru.sulgik.mapkit.map.CameraPosition
 import java.util.Locale
+import kotlin.math.pow
+import kotlin.math.sqrt
 
 @OptIn(YandexMapsComposeExperimentalApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun MapScreen(
     selectedParameter: Parameters,
+    userStations: List<StationWithLocation>,
     latestSensorData: Map<String, Double>,
     isLoadingLatestData: Boolean,
     onChangeMapParameter: (Parameters) -> Unit,
+    onCameraZoomChange: (Float) -> Unit,
     navController: NavController
 ) {
-    val cameraPositionState = rememberCameraPositionState { position = startPosition }
-    var selectedPoint by remember { mutableStateOf<Pair<String, Point>?>(null) }
+    // Настраиваем начальную позицию камеры
+    val initialPosition = if (userStations.isNotEmpty()) {
+        CameraPosition(
+            Point(userStations[0].latitude, userStations[0].longitude),
+            zoom = 15.0f,
+            azimuth = 0.0f,
+            tilt = 0.0f
+        )
+    } else {
+        CameraPosition(
+            Point(56.460337, 84.961591), // Дефолтная позиция
+            zoom = 15.0f,
+            azimuth = 0.0f,
+            tilt = 0.0f
+        )
+    }
+
+    val cameraPositionState = rememberCameraPositionState {
+        position = initialPosition
+    }
+
+    // Отслеживаем изменение зума камеры
+    LaunchedEffect(cameraPositionState.position.zoom) {
+        onCameraZoomChange(cameraPositionState.position.zoom)
+    }
+
+    var selectedPoint by remember { mutableStateOf<StationWithLocation?>(null) }
     val scope = rememberCoroutineScope()
 
     // Состояние для BottomSheet с начальным значением PartiallyExpanded
@@ -95,10 +124,8 @@ fun MapScreen(
     )
 
     // Учитываем высоту статус-бара
-    WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-
-    val navigationBarsPadding =
-        WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val statusBarPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val navigationBarsPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
 
     BottomSheetScaffold(
         scaffoldState = BottomSheetScaffoldState(bottomSheetState, SnackbarHostState()),
@@ -108,8 +135,7 @@ fun MapScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(
-                        bottom = WindowInsets.navigationBars.asPaddingValues()
-                            .calculateBottomPadding()
+                        bottom = navigationBarsPadding
                     )
                     .defaultMinSize(minHeight = 400.dp)
             ) {
@@ -239,7 +265,7 @@ fun MapScreen(
                                     Spacer(modifier = Modifier.width(8.dp))
 
                                     Text(
-                                        text = selectedPoint?.first ?: "Выберите точку на карте",
+                                        text = selectedPoint?.name ?: "Выберите точку на карте",
                                         style = MaterialTheme.typography.bodyMedium
                                     )
                                 }
@@ -252,9 +278,9 @@ fun MapScreen(
                                     .fillMaxWidth(0.9f)
                                     .background(MaterialTheme.colorScheme.surface)
                             ) {
-                                placemarks.forEach { (name, coordinate) ->
+                                userStations.forEach { station ->
                                     DropdownMenuItem(
-                                        text = { Text(name) },
+                                        text = { Text(station.name) },
                                         leadingIcon = {
                                             Icon(
                                                 Icons.Default.Place,
@@ -263,11 +289,11 @@ fun MapScreen(
                                             )
                                         },
                                         onClick = {
-                                            selectedPoint = name to coordinate
+                                            selectedPoint = station
                                             expanded = false
                                             cameraPositionState.position =
                                                 CameraPosition(
-                                                    coordinate,
+                                                    Point(station.latitude, station.longitude),
                                                     zoom = 18f,
                                                     azimuth = 0f,
                                                     tilt = 0f
@@ -292,54 +318,18 @@ fun MapScreen(
         sheetDragHandle = null // Мы добавили свой собственный дизайн для drag handle
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
-            // Карта с плейсмарками
+            // Карта с кластеризацией точек
             YandexMap(
                 cameraPositionState = cameraPositionState,
                 modifier = Modifier.fillMaxSize()
             ) {
-                placemarks.forEach { (name, coordinate) ->
-                    latestSensorData[name]?.let { data ->
-                        Placemark(
-                            state = rememberPlacemarkState(coordinate),
-                            icon = imageProvider(
-                                size = DpSize(80.dp, 32.dp),
-                                selectedParameter,
-                                latestSensorData,
-                                isLoadingLatestData
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .shadow(4.dp, RoundedCornerShape(12.dp))
-                                        .background(
-                                            MaterialTheme.colorScheme.surfaceVariant,
-                                            RoundedCornerShape(12.dp)
-                                        )
-                                        .border(
-                                            1.dp,
-                                            MaterialTheme.colorScheme.outline,
-                                            RoundedCornerShape(12.dp)
-                                        )
-                                        .padding(horizontal = 8.dp, vertical = 6.dp)
-                                        .animateContentSize()
-                                ) {
-                                    Text(
-                                        text = String.format(
-                                            Locale.getDefault(),
-                                            "%.1f",
-                                            data
-                                        ) + " ${selectedParameter.getUnit()}",
-                                        fontSize = 14.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            },
-                            onTap = {
-                                navController.navigate("${Screen.Chart.route}/$name")
-                                true
-                            }
-                        )
-                    }
+                ClusteredMapView(
+                    stations = userStations,
+                    zoomLevel = cameraPositionState.position.zoom,
+                    selectedParameter = selectedParameter,
+                    latestSensorData = latestSensorData
+                ) { stationId ->
+                    navController.navigate("${Screen.Chart.route}/$stationId")
                 }
             }
 
@@ -347,7 +337,7 @@ fun MapScreen(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(WindowInsets.statusBars.asPaddingValues().calculateTopPadding())
+                    .height(statusBarPadding)
                     .background(Color.Black.copy(alpha = 0.3f))
             )
 
@@ -378,6 +368,164 @@ fun MapScreen(
                         )
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+fun ClusteredMapView(
+    stations: List<StationWithLocation>,
+    zoomLevel: Float,
+    selectedParameter: Parameters,
+    latestSensorData: Map<String, Double>,
+    onMarkerClick: (String) -> Unit
+) {
+    // Порог расстояния для объединения точек, зависящий от зума
+    val clusterThreshold = when {
+        zoomLevel < 10f -> 0.05 // большое расстояние при малом зуме
+        zoomLevel < 13f -> 0.02 // среднее расстояние
+        else -> 0.0 // без кластеризации при большом зуме
+    }
+
+    // Группируем станции в кластеры
+    val clusters = if (clusterThreshold > 0.0) {
+        createClusters(stations, clusterThreshold, latestSensorData, selectedParameter)
+    } else {
+        // Каждая станция как отдельный кластер
+        stations.map { station ->
+            ClusterInfo(
+                stations = listOf(station),
+                latitude = station.latitude,
+                longitude = station.longitude,
+                averageValue = latestSensorData[station.stationNumber] ?: 0.0,
+                parameter = selectedParameter
+            )
+        }
+    }
+
+    // Отображаем кластеры на карте
+    clusters.forEach { cluster ->
+        val placemarkState = rememberPlacemarkState(Point(cluster.latitude, cluster.longitude))
+
+        Placemark(
+            state = placemarkState,
+            icon = imageProvider(
+                size = DpSize(if (cluster.stations.size > 1) 100.dp else 80.dp, 40.dp)
+            ) {
+                ClusterMarker(cluster)
+            },
+            onTap = {
+                if (cluster.stations.size == 1) {
+                    onMarkerClick(cluster.stations.first().stationNumber)
+                } else {
+                    // При нажатии на кластер - зуммируем карту для разделения кластера
+                }
+                true
+            }
+        )
+    }
+}
+
+data class ClusterInfo(
+    val stations: List<StationWithLocation>,
+    val latitude: Double,
+    val longitude: Double,
+    val averageValue: Double,
+    val parameter: Parameters
+)
+
+// Функция для кластеризации точек
+private fun createClusters(
+    stations: List<StationWithLocation>,
+    threshold: Double,
+    latestSensorData: Map<String, Double>,
+    parameter: Parameters
+): List<ClusterInfo> {
+    val clusters = mutableListOf<MutableList<StationWithLocation>>()
+
+    for (station in stations) {
+        var addedToExistingCluster = false
+
+        for (cluster in clusters) {
+            val clusterCenter = calculateClusterCenter(cluster)
+
+            if (calculateDistance(
+                    station.latitude, station.longitude,
+                    clusterCenter.first, clusterCenter.second
+                ) <= threshold) {
+                cluster.add(station)
+                addedToExistingCluster = true
+                break
+            }
+        }
+
+        if (!addedToExistingCluster) {
+            clusters.add(mutableListOf(station))
+        }
+    }
+
+    return clusters.map { cluster ->
+        val center = calculateClusterCenter(cluster)
+        val avgValue = cluster
+            .mapNotNull { latestSensorData[it.stationNumber] }
+            .takeIf { it.isNotEmpty() }
+            ?.average() ?: 0.0
+
+        ClusterInfo(
+            stations = cluster,
+            latitude = center.first,
+            longitude = center.second,
+            averageValue = avgValue,
+            parameter = parameter
+        )
+    }
+}
+
+// Рассчитать центр кластера
+private fun calculateClusterCenter(stations: List<StationWithLocation>): Pair<Double, Double> {
+    val sumLat = stations.sumOf { it.latitude }
+    val sumLon = stations.sumOf { it.longitude }
+    return Pair(sumLat / stations.size, sumLon / stations.size)
+}
+
+// Рассчитать расстояние между точками (приближенно)
+private fun calculateDistance(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
+    return sqrt((lat1 - lat2).pow(2) + (lon1 - lon2).pow(2))
+}
+
+@Composable
+private fun ClusterMarker(cluster: ClusterInfo) {
+    Box(
+        modifier = Modifier
+            .shadow(4.dp, RoundedCornerShape(12.dp))
+            .background(
+                MaterialTheme.colorScheme.surfaceVariant,
+                RoundedCornerShape(12.dp)
+            )
+            .border(
+                1.dp,
+                MaterialTheme.colorScheme.outline,
+                RoundedCornerShape(12.dp)
+            )
+            .padding(horizontal = 8.dp, vertical = 6.dp)
+            .animateContentSize()
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                text = String.format(Locale.getDefault(), "%.1f", cluster.averageValue) +
+                        " ${cluster.parameter.getUnit()}",
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            if (cluster.stations.size > 1) {
+                Text(
+                    text = "(${cluster.stations.size} точек)",
+                    fontSize = 10.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                )
             }
         }
     }

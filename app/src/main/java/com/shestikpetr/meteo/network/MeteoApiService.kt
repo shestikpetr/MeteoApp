@@ -1,5 +1,6 @@
 package com.shestikpetr.meteo.network
 
+import retrofit2.Response
 import retrofit2.http.GET
 import retrofit2.http.Path
 import retrofit2.http.Query
@@ -11,9 +12,7 @@ import retrofit2.http.Header
 interface MeteoApiService {
     // Авторизация пользователя
     @POST("auth/login")
-    suspend fun login(
-        @Body credentials: UserCredentials
-    ): LoginResponse
+    suspend fun login(@Body credentials: UserCredentials): Response<LoginResponse>
 
     // Получение данных сенсора за период
     @GET("sensors/{complexId}/{parameter}")
