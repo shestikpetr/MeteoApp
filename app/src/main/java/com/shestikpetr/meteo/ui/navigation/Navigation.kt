@@ -19,6 +19,7 @@ import com.shestikpetr.meteo.ui.login.LoginScreen
 import com.shestikpetr.meteo.ui.login.LoginViewModel
 import com.shestikpetr.meteo.ui.splash.SplashScreen
 
+
 sealed class Screen(val route: String) {
     data object Splash : Screen("splash")
     data object Login : Screen("login")
@@ -37,7 +38,7 @@ fun MeteoApp(
 
     NavHost(
         navController = navController,
-        startDestination = Screen.Splash.route // Начинаем с экрана заставки
+        startDestination = Screen.Splash.route
     ) {
         composable(Screen.Splash.route) {
             SplashScreen {
@@ -57,6 +58,8 @@ fun MeteoApp(
         composable(Screen.Login.route) {
             LoginScreen(
                 onLoginSuccess = {
+                    // После входа загружаем станции пользователя
+                    viewModel.loadUserStations()
                     navController.navigate(Screen.Map.route) {
                         popUpTo(Screen.Login.route) { inclusive = true }
                     }
@@ -67,10 +70,14 @@ fun MeteoApp(
         composable(Screen.Map.route) {
             MapScreen(
                 selectedParameter = mapUiState.selectedParameter,
+                userStations = mapUiState.userStations,
                 latestSensorData = mapUiState.latestSensorData,
                 isLoadingLatestData = mapUiState.isLoadingLatestData,
                 onChangeMapParameter = { parameter ->
                     viewModel.changeMapParameter(parameter)
+                },
+                onCameraZoomChange = { zoom ->
+                    viewModel.updateCameraZoom(zoom)
                 },
                 navController = navController
             )

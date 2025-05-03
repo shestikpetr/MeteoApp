@@ -1,5 +1,6 @@
 package com.shestikpetr.meteo.network
 
+import android.util.Log
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -24,18 +25,25 @@ class NetworkAuthRepository @Inject constructor(
 ) : AuthRepository {
 
     override suspend fun login(username: String, password: String): LoginResult {
-        return try {
+        try {
+            Log.d("AuthRepository", "Attempting login for user: $username")
             val credentials = UserCredentials(username, password)
             val response = meteoApiService.login(credentials)
 
-            if (response.success && response.token != null) {
-                authManager.saveCredentials(username, password)
-                LoginResult.Success(response.token)
+            if (response.isSuccessful) {
+                val loginResponse = response.body()
+                if (loginResponse?.success == true) {
+                    authManager.saveCredentials(username, password)
+                    return LoginResult.Success(loginResponse.token ?: "")
+                } else {
+                    return LoginResult.Error(loginResponse?.error ?: "Ошибка авторизации")
+                }
             } else {
-                LoginResult.Error(response.error ?: "Ошибка авторизации")
+                return LoginResult.Error("Ошибка сервера: ${response.code()}")
             }
         } catch (e: Exception) {
-            LoginResult.Error(e.message ?: "Неизвестная ошибка")
+            Log.e("AuthRepository", "Login error", e)
+            return LoginResult.Error(e.message ?: "Неизвестная ошибка")
         }
     }
 
