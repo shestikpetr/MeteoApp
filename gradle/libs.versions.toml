@@ -1,19 +1,29 @@
 [versions]
-agp = "8.7.2"
+agp = "8.9.2"
+hiltAndroidCompiler = "2.48"
+hiltCommon = "1.2.0"
 kotlin = "2.0.0"
-coreKtx = "1.13.1"
+coreKtx = "1.16.0"
 junit = "4.13.2"
 junitVersion = "1.2.1"
 espressoCore = "3.6.1"
-lifecycleRuntimeKtx = "2.8.6"
-activityCompose = "1.9.2"
-composeBom = "2024.04.01"
-mapsCompose = "latest_version"
-playServicesMaps = "19.0.0"
-playServicesMapsVersion = "latest_version"
+lifecycleRuntimeKtx = "2.8.7"
+activityCompose = "1.10.1"
+composeBom = "2025.04.01"
+retrofitVersion = "2.9.0"
+hiltVersion = "2.51.1"
+hiltVersionNavigation = "1.2.0"
+kaptVersion = "2.0.0-RC1"
+yandexMapkitKmp = "0.1.1"
+yandexMapkitKmpCompose = "0.1.1"
+ychartsVersion = "2.1.0"
+okhttp = "4.12.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
+androidx-hilt-common = { module = "androidx.hilt:hilt-common", version.ref = "hiltCommon" }
+androidx-hilt-compiler = { module = "androidx.hilt:hilt-compiler", version.ref = "hiltCommon" }
+dagger-hilt-android-compiler = { module = "com.google.dagger:hilt-android-compiler", version.ref = "hiltAndroidCompiler" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junitVersion" }
 androidx-espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "espressoCore" }
@@ -27,12 +37,22 @@ androidx-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-toolin
 androidx-ui-test-manifest = { group = "androidx.compose.ui", name = "ui-test-manifest" }
 androidx-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-test-junit4" }
 androidx-material3 = { group = "androidx.compose.material3", name = "material3" }
-maps-compose = { module = "com.google.maps.android:maps-compose", version.ref = "mapsCompose" }
-play-services-maps = { group = "com.google.android.gms", name = "play-services-maps", version.ref = "playServicesMaps" }
-play-services-maps-vlatestversion = { module = "com.google.android.gms:play-services-maps", version.ref = "playServicesMapsVersion" }
+logging-interceptor = { module = "com.squareup.okhttp3:logging-interceptor", version.ref = "okhttp" }
+retrofit-android = { module = "com.squareup.retrofit2:retrofit", version.ref = "retrofitVersion" }
+retrofit-android-converter = { module = "com.squareup.retrofit2:converter-gson", version.ref = "retrofitVersion" }
+hilt-android = { module = "com.google.dagger:hilt-android", version.ref = "hiltVersion" }
+hilt-android-compiler = { module = "com.google.dagger:hilt-compiler", version.ref = "hiltVersion" }
+hilt-navigation = { module = "androidx.hilt:hilt-navigation-compose", version.ref = "hiltVersionNavigation" }
+yandex-mapkit-kmp = { module = "ru.sulgik.mapkit:yandex-mapkit-kmp", version.ref = "yandexMapkitKmp" }
+yandex-mapkit-kmp-compose = { module = "ru.sulgik.mapkit:yandex-mapkit-kmp-compose", version.ref = "yandexMapkitKmpCompose" }
+yml-ycharts = { module = "co.yml:ycharts", version.ref = "ychartsVersion" }
+
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
-kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
-kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+jetbrains-kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 
+
+kapt = { id = "org.jetbrains.kotlin.kapt", version.ref = "kaptVersion" }
+hiltCompiler = { id = "com.google.dagger.hilt.android", version.ref = "hiltVersion" }
+compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
