@@ -6,50 +6,15 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.foundation.layout.defaultMinSize
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Place
-import androidx.compose.material3.BottomSheetScaffold
-import androidx.compose.material3.BottomSheetScaffoldState
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.MenuDefaults
-import androidx.compose.material3.SheetValue
-import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Text
-import androidx.compose.material3.rememberStandardBottomSheetState
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -57,12 +22,13 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
-import com.shestikpetr.meteo.ui.Parameters
 import com.shestikpetr.meteo.data.StationWithLocation
+import com.shestikpetr.meteo.ui.Parameters
 import com.shestikpetr.meteo.ui.navigation.Screen
 import kotlinx.coroutines.launch
 import ru.sulgik.mapkit.compose.Placemark
@@ -86,30 +52,46 @@ fun MapScreen(
     isLoadingLatestData: Boolean,
     onChangeMapParameter: (Parameters) -> Unit,
     onCameraZoomChange: (Float) -> Unit,
-    navController: NavController
+    navController: NavController,
+    onRefreshStations: () -> Unit
 ) {
-    // Настраиваем начальную позицию камеры
-    val initialPosition = if (userStations.isNotEmpty()) {
-        CameraPosition(
-            Point(userStations[0].latitude, userStations[0].longitude),
-            zoom = 15.0f,
-            azimuth = 0.0f,
-            tilt = 0.0f
-        )
-    } else {
-        CameraPosition(
-            Point(56.460337, 84.961591), // Дефолтная позиция
-            zoom = 15.0f,
-            azimuth = 0.0f,
-            tilt = 0.0f
-        )
+    // State for error messages
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+
+    // Обработка состояния данных
+    LaunchedEffect(userStations, isLoadingLatestData) {
+        errorMessage = if (userStations.isEmpty() && !isLoadingLatestData) {
+            "Не удалось загрузить данные метеостанций."
+        } else {
+            null
+        }
+    }
+
+    // Initialize camera position based on available stations
+    val initialPosition = remember(userStations) {
+        if (userStations.isNotEmpty()) {
+            CameraPosition(
+                Point(userStations[0].latitude, userStations[0].longitude),
+                zoom = 15.0f,
+                azimuth = 0.0f,
+                tilt = 0.0f
+            )
+        } else {
+            // Default position if no stations available
+            CameraPosition(
+                Point(56.460337, 84.961591),
+                zoom = 15.0f,
+                azimuth = 0.0f,
+                tilt = 0.0f
+            )
+        }
     }
 
     val cameraPositionState = rememberCameraPositionState {
         position = initialPosition
     }
 
-    // Отслеживаем изменение зума камеры
+    // Track camera zoom changes
     LaunchedEffect(cameraPositionState.position.zoom) {
         onCameraZoomChange(cameraPositionState.position.zoom)
     }
@@ -117,223 +99,67 @@ fun MapScreen(
     var selectedPoint by remember { mutableStateOf<StationWithLocation?>(null) }
     val scope = rememberCoroutineScope()
 
-    // Состояние для BottomSheet с начальным значением PartiallyExpanded
+    // Create drawer state for the bottom sheet
     val bottomSheetState = rememberStandardBottomSheetState(
         initialValue = SheetValue.PartiallyExpanded,
-        skipHiddenState = true // Предотвращаем полное скрытие меню
+        skipHiddenState = true
     )
 
-    // Учитываем высоту статус-бара
+    // Calculate insets for status and navigation bars
     val statusBarPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    val navigationBarsPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val navigationBarsPadding =
+        WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
 
+    // Create scaffold with bottom sheet
     BottomSheetScaffold(
         scaffoldState = BottomSheetScaffoldState(bottomSheetState, SnackbarHostState()),
-        sheetPeekHeight = 64.dp + navigationBarsPadding, // Высота видимой части меню в свернутом состоянии
+        sheetPeekHeight = 64.dp + navigationBarsPadding,
         sheetContent = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(
-                        bottom = navigationBarsPadding
+            MapBottomSheet(
+                bottomSheetState = bottomSheetState,
+                selectedParameter = selectedParameter,
+                onChangeParameter = onChangeMapParameter,
+                userStations = userStations,
+                selectedPoint = selectedPoint,
+                onStationSelected = { station ->
+                    selectedPoint = station
+                    cameraPositionState.position = CameraPosition(
+                        Point(station.latitude, station.longitude),
+                        zoom = 18f,
+                        azimuth = 0f,
+                        tilt = 0f
                     )
-                    .defaultMinSize(minHeight = 400.dp)
-            ) {
-                // Заголовок с полосой для перетаскивания
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 12.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        // Полоса для перетаскивания
-                        Box(
-                            modifier = Modifier
-                                .width(40.dp)
-                                .height(4.dp)
-                                .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f))
-                        )
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        // Заголовок виден только в развернутом состоянии
-                        if (bottomSheetState.currentValue == SheetValue.Expanded) {
-                            Text(
-                                "Настройки карты",
-                                style = MaterialTheme.typography.titleLarge,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                fontWeight = FontWeight.Bold
-                            )
-                        } else {
-                            // В свернутом состоянии показываем только текущий параметр
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    "Параметр: ${selectedParameter.name}",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                            }
-                        }
+                    scope.launch {
+                        bottomSheetState.partialExpand()
                     }
-                }
-
-                // Дальнейшее содержимое видно только в развернутом состоянии
-                if (bottomSheetState.currentValue == SheetValue.Expanded) {
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    HorizontalDivider(
-                        modifier = Modifier.padding(horizontal = 16.dp),
-                        color = MaterialTheme.colorScheme.outlineVariant
-                    )
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    // Секция параметров
-                    Card(
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant
-                        ),
-                        modifier = Modifier
-                            .padding(horizontal = 16.dp)
-                            .fillMaxWidth()
-                    ) {
-                        Column(modifier = Modifier.padding(16.dp)) {
-                            Text(
-                                "Выбрать параметр",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Medium
-                            )
-
-                            Spacer(modifier = Modifier.height(8.dp))
-
-                            ParametersDropdownMenuMap(
-                                selectedParameter = selectedParameter,
-                                onChangeParameter = onChangeMapParameter,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    // Секция выбора точки
-                    Card(
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant
-                        ),
-                        modifier = Modifier
-                            .padding(horizontal = 16.dp)
-                            .fillMaxWidth()
-                    ) {
-                        Column(modifier = Modifier.padding(16.dp)) {
-                            Text(
-                                "Выбрать точку",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Medium
-                            )
-
-                            Spacer(modifier = Modifier.height(8.dp))
-
-                            var expanded by remember { mutableStateOf(false) }
-
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(MaterialTheme.shapes.medium)
-                                    .border(
-                                        1.dp,
-                                        MaterialTheme.colorScheme.outline,
-                                        MaterialTheme.shapes.medium
-                                    )
-                                    .background(MaterialTheme.colorScheme.surface)
-                                    .clickable { expanded = true }
-                                    .padding(12.dp)
-                            ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(
-                                        Icons.Default.Place,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-
-                                    Spacer(modifier = Modifier.width(8.dp))
-
-                                    Text(
-                                        text = selectedPoint?.name ?: "Выберите точку на карте",
-                                        style = MaterialTheme.typography.bodyMedium
-                                    )
-                                }
-                            }
-
-                            DropdownMenu(
-                                expanded = expanded,
-                                onDismissRequest = { expanded = false },
-                                modifier = Modifier
-                                    .fillMaxWidth(0.9f)
-                                    .background(MaterialTheme.colorScheme.surface)
-                            ) {
-                                userStations.forEach { station ->
-                                    DropdownMenuItem(
-                                        text = { Text(station.name) },
-                                        leadingIcon = {
-                                            Icon(
-                                                Icons.Default.Place,
-                                                contentDescription = null,
-                                                tint = MaterialTheme.colorScheme.primary
-                                            )
-                                        },
-                                        onClick = {
-                                            selectedPoint = station
-                                            expanded = false
-                                            cameraPositionState.position =
-                                                CameraPosition(
-                                                    Point(station.latitude, station.longitude),
-                                                    zoom = 18f,
-                                                    azimuth = 0f,
-                                                    tilt = 0f
-                                                )
-                                            scope.launch {
-                                                bottomSheetState.partialExpand()
-                                            }
-                                        }
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-                }
-            }
+                },
+                navigationBarsPadding = navigationBarsPadding
+            )
         },
         sheetShape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
         sheetShadowElevation = 8.dp,
         sheetContainerColor = MaterialTheme.colorScheme.surface,
-        sheetDragHandle = null // Мы добавили свой собственный дизайн для drag handle
+        sheetDragHandle = null
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
-            // Карта с кластеризацией точек
+            // Main map content
             YandexMap(
                 cameraPositionState = cameraPositionState,
                 modifier = Modifier.fillMaxSize()
             ) {
+                // Display stations with clustering based on zoom level
                 ClusteredMapView(
                     stations = userStations,
                     zoomLevel = cameraPositionState.position.zoom,
                     selectedParameter = selectedParameter,
                     latestSensorData = latestSensorData
                 ) { stationId ->
+                    // Navigate to chart screen when station marker is clicked
                     navController.navigate("${Screen.Chart.route}/$stationId")
                 }
             }
 
-            // Тень для статус-бара
+            // Status bar overlay for better visibility
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -341,12 +167,75 @@ fun MapScreen(
                     .background(Color.Black.copy(alpha = 0.3f))
             )
 
-            // Индикатор загрузки
+            // Back button to show at top left
+            IconButton(
+                onClick = { navController.popBackStack() },
+                modifier = Modifier
+                    .padding(start = 16.dp, top = statusBarPadding + 8.dp)
+                    .size(40.dp)
+                    .shadow(4.dp, CircleShape)
+                    .background(
+                        MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
+                        CircleShape
+                    )
+            ) {
+                Icon(
+                    Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Назад",
+                    tint = MaterialTheme.colorScheme.onSurface
+                )
+            }
+
+            // Refresh button at top right
+            IconButton(
+                onClick = { onChangeMapParameter(selectedParameter) },
+                modifier = Modifier
+                    .padding(end = 16.dp, top = statusBarPadding + 8.dp)
+                    .align(Alignment.TopEnd)
+                    .size(40.dp)
+                    .shadow(4.dp, CircleShape)
+                    .background(
+                        MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
+                        CircleShape
+                    )
+            ) {
+                Icon(
+                    Icons.Default.Refresh,
+                    contentDescription = "Обновить данные",
+                    tint = MaterialTheme.colorScheme.onSurface
+                )
+            }
+
+            // Error message snackbar
+            errorMessage?.let { message ->
+                Snackbar(
+                    modifier = Modifier
+                        .padding(16.dp)
+                        .align(Alignment.BottomCenter),
+                    action = {
+                        TextButton(onClick = { errorMessage = null }) {
+                            Text("OK")
+                        }
+                    },
+                    dismissAction = {
+                        IconButton(onClick = { errorMessage = null }) {
+                            Icon(
+                                Icons.Default.Refresh,
+                                contentDescription = "Закрыть"
+                            )
+                        }
+                    }
+                ) {
+                    Text(message)
+                }
+            }
+
+            // Loading indicator
             if (isLoadingLatestData) {
                 Box(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
-                        .padding(bottom = 80.dp) // Выше нижнего меню
+                        .padding(bottom = 80.dp)
                         .shadow(4.dp, RoundedCornerShape(24.dp))
                         .background(
                             MaterialTheme.colorScheme.surface,
@@ -359,9 +248,7 @@ fun MapScreen(
                             modifier = Modifier.size(18.dp),
                             strokeWidth = 2.dp
                         )
-
                         Spacer(modifier = Modifier.width(8.dp))
-
                         Text(
                             "Обновление данных...",
                             style = MaterialTheme.typography.bodySmall
@@ -369,10 +256,289 @@ fun MapScreen(
                     }
                 }
             }
+
+            errorMessage?.let { message ->
+                Card(
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .fillMaxWidth(0.8f)
+                        .padding(16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            message,
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Button(
+                            onClick = { onRefreshStations() },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary
+                            )
+                        ) {
+                            Icon(
+                                Icons.Default.Refresh,
+                                contentDescription = "Обновить",
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Повторить загрузку")
+                        }
+                    }
+                }
+            }
         }
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MapBottomSheet(
+    bottomSheetState: SheetState,
+    selectedParameter: Parameters,
+    onChangeParameter: (Parameters) -> Unit,
+    userStations: List<StationWithLocation>,
+    selectedPoint: StationWithLocation?,
+    onStationSelected: (StationWithLocation) -> Unit,
+    navigationBarsPadding: Dp
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = navigationBarsPadding)
+            .defaultMinSize(minHeight = 400.dp)
+    ) {
+        // Sheet handle and title
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 12.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                // Drag handle
+                Box(
+                    modifier = Modifier
+                        .width(40.dp)
+                        .height(4.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f))
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Title based on sheet state
+                if (bottomSheetState.currentValue == SheetValue.Expanded) {
+                    Text(
+                        "Настройки карты",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontWeight = FontWeight.Bold
+                    )
+                } else {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "Параметр: ${selectedParameter.name}",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+            }
+        }
+
+        // Content only visible in expanded state
+        if (bottomSheetState.currentValue == SheetValue.Expanded) {
+            Spacer(modifier = Modifier.height(8.dp))
+
+            HorizontalDivider(
+                modifier = Modifier.padding(horizontal = 16.dp),
+                color = MaterialTheme.colorScheme.outlineVariant
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Parameter selection section
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                ),
+                modifier = Modifier
+                    .padding(horizontal = 16.dp)
+                    .fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        "Выбрать параметр",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Medium
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    ParametersDropdownMenuMap(
+                        selectedParameter = selectedParameter,
+                        onChangeParameter = onChangeParameter,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Station selection section
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                ),
+                modifier = Modifier
+                    .padding(horizontal = 16.dp)
+                    .fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        "Выбрать метеостанцию",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Medium
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    StationSelector(
+                        stations = userStations,
+                        selectedStation = selectedPoint,
+                        onStationSelected = onStationSelected
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Legend/info section
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                ),
+                modifier = Modifier
+                    .padding(horizontal = 16.dp)
+                    .fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        "Информация",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Medium
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Text(
+                        "• Нажмите на маркер станции для просмотра графика",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Text(
+                        "• При отдалении камеры близкие станции объединяются в кластеры",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Text(
+                        "• Цвет маркера отражает значение выбранного параметра",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun StationSelector(
+    stations: List<StationWithLocation>,
+    selectedStation: StationWithLocation?,
+    onStationSelected: (StationWithLocation) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(MaterialTheme.shapes.medium)
+            .border(
+                1.dp,
+                MaterialTheme.colorScheme.outline,
+                MaterialTheme.shapes.medium
+            )
+            .background(MaterialTheme.colorScheme.surface)
+            .clickable { expanded = true }
+            .padding(12.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                Icons.Default.Place,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(18.dp)
+            )
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            Text(
+                text = selectedStation?.name ?: "Выберите метеостанцию на карте",
+                style = MaterialTheme.typography.bodyMedium
+            )
+        }
+    }
+
+    DropdownMenu(
+        expanded = expanded,
+        onDismissRequest = { expanded = false },
+        modifier = Modifier
+            .fillMaxWidth(0.9f)
+            .background(MaterialTheme.colorScheme.surface)
+    ) {
+        if (stations.isEmpty()) {
+            DropdownMenuItem(
+                text = { Text("Нет доступных метеостанций") },
+                onClick = { expanded = false },
+                enabled = false
+            )
+        } else {
+            stations.forEach { station ->
+                DropdownMenuItem(
+                    text = { Text(station.name) },
+                    leadingIcon = {
+                        Icon(
+                            Icons.Default.Place,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    },
+                    onClick = {
+                        onStationSelected(station)
+                        expanded = false
+                    }
+                )
+            }
+        }
+    }
+}
+
+@OptIn(YandexMapsComposeExperimentalApi::class)
 @Composable
 fun ClusteredMapView(
     stations: List<StationWithLocation>,
@@ -381,18 +547,18 @@ fun ClusteredMapView(
     latestSensorData: Map<String, Double>,
     onMarkerClick: (String) -> Unit
 ) {
-    // Порог расстояния для объединения точек, зависящий от зума
+    // Threshold for clustering based on zoom level
     val clusterThreshold = when {
-        zoomLevel < 10f -> 0.05 // большое расстояние при малом зуме
-        zoomLevel < 13f -> 0.02 // среднее расстояние
-        else -> 0.0 // без кластеризации при большом зуме
+        zoomLevel < 10f -> 0.05
+        zoomLevel < 13f -> 0.02
+        else -> 0.0 // No clustering at high zoom levels
     }
 
-    // Группируем станции в кластеры
+    // Group stations into clusters
     val clusters = if (clusterThreshold > 0.0) {
         createClusters(stations, clusterThreshold, latestSensorData, selectedParameter)
     } else {
-        // Каждая станция как отдельный кластер
+        // Each station as separate cluster
         stations.map { station ->
             ClusterInfo(
                 stations = listOf(station),
@@ -404,7 +570,7 @@ fun ClusteredMapView(
         }
     }
 
-    // Отображаем кластеры на карте
+    // Display clusters on map
     clusters.forEach { cluster ->
         val placemarkState = rememberPlacemarkState(Point(cluster.latitude, cluster.longitude))
 
@@ -418,8 +584,6 @@ fun ClusteredMapView(
             onTap = {
                 if (cluster.stations.size == 1) {
                     onMarkerClick(cluster.stations.first().stationNumber)
-                } else {
-                    // При нажатии на кластер - зуммируем карту для разделения кластера
                 }
                 true
             }
@@ -435,7 +599,7 @@ data class ClusterInfo(
     val parameter: Parameters
 )
 
-// Функция для кластеризации точек
+// Create clusters from stations based on proximity
 private fun createClusters(
     stations: List<StationWithLocation>,
     threshold: Double,
@@ -453,7 +617,8 @@ private fun createClusters(
             if (calculateDistance(
                     station.latitude, station.longitude,
                     clusterCenter.first, clusterCenter.second
-                ) <= threshold) {
+                ) <= threshold
+            ) {
                 cluster.add(station)
                 addedToExistingCluster = true
                 break
@@ -482,20 +647,26 @@ private fun createClusters(
     }
 }
 
-// Рассчитать центр кластера
+// Calculate cluster center as average of station coordinates
 private fun calculateClusterCenter(stations: List<StationWithLocation>): Pair<Double, Double> {
     val sumLat = stations.sumOf { it.latitude }
     val sumLon = stations.sumOf { it.longitude }
     return Pair(sumLat / stations.size, sumLon / stations.size)
 }
 
-// Рассчитать расстояние между точками (приближенно)
+// Calculate approximate distance between two points
 private fun calculateDistance(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
     return sqrt((lat1 - lat2).pow(2) + (lon1 - lon2).pow(2))
 }
 
 @Composable
 private fun ClusterMarker(cluster: ClusterInfo) {
+    // Calculate color based on value (example: blue-to-red gradient)
+    val markerColor = getColorForValue(
+        value = cluster.averageValue,
+        parameter = cluster.parameter
+    )
+
     Box(
         modifier = Modifier
             .shadow(4.dp, RoundedCornerShape(12.dp))
@@ -505,7 +676,7 @@ private fun ClusterMarker(cluster: ClusterInfo) {
             )
             .border(
                 1.dp,
-                MaterialTheme.colorScheme.outline,
+                markerColor,
                 RoundedCornerShape(12.dp)
             )
             .padding(horizontal = 8.dp, vertical = 6.dp)
@@ -526,6 +697,44 @@ private fun ClusterMarker(cluster: ClusterInfo) {
                     fontSize = 10.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun getColorForValue(value: Double, parameter: Parameters): Color {
+    // Define color ranges based on parameter type
+    return when (parameter) {
+        Parameters.TEMPERATURE -> {
+            when {
+                value < -10.0 -> Color(0xFF1E88E5) // Cold blue
+                value < 0.0 -> Color(0xFF42A5F5)   // Blue
+                value < 10.0 -> Color(0xFF26C6DA)  // Cyan
+                value < 20.0 -> Color(0xFF66BB6A)  // Green
+                value < 30.0 -> Color(0xFFFFA726)  // Orange
+                else -> Color(0xFFEF5350)          // Red - hot
+            }
+        }
+
+        Parameters.HUMIDITY -> {
+            when {
+                value < 20.0 -> Color(0xFFEF5350)  // Red - dry
+                value < 40.0 -> Color(0xFFFFA726)  // Orange
+                value < 60.0 -> Color(0xFF66BB6A)  // Green
+                value < 80.0 -> Color(0xFF26C6DA)  // Cyan
+                else -> Color(0xFF1E88E5)          // Blue - humid
+            }
+        }
+
+        Parameters.PRESSURE -> {
+            when {
+                value < 980.0 -> Color(0xFF7E57C2) // Purple - low pressure
+                value < 1000.0 -> Color(0xFF5C6BC0) // Indigo
+                value < 1013.0 -> Color(0xFF42A5F5) // Blue
+                value < 1020.0 -> Color(0xFF26A69A) // Teal
+                value < 1030.0 -> Color(0xFFFFB74D) // Amber
+                else -> Color(0xFFEF5350)          // Red - high pressure
             }
         }
     }
@@ -553,7 +762,11 @@ fun ParametersDropdownMenuMap(
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Text(
-                text = selectedParameter.name,
+                text = when (selectedParameter) {
+                    Parameters.TEMPERATURE -> "Температура (°C)"
+                    Parameters.HUMIDITY -> "Влажность (%)"
+                    Parameters.PRESSURE -> "Давление (гПа)"
+                },
                 style = MaterialTheme.typography.bodyMedium
             )
 
@@ -570,13 +783,21 @@ fun ParametersDropdownMenuMap(
     DropdownMenu(
         expanded = expanded,
         onDismissRequest = { expanded = false },
-        modifier = Modifier.fillMaxWidth(0.9f)
+        modifier = Modifier
+            .fillMaxWidth(0.9f)
+            .background(MaterialTheme.colorScheme.surface)
     ) {
         Parameters.entries.forEach { parameter ->
+            val parameterText = when (parameter) {
+                Parameters.TEMPERATURE -> "Температура (°C)"
+                Parameters.HUMIDITY -> "Влажность (%)"
+                Parameters.PRESSURE -> "Давление (гПа)"
+            }
+
             DropdownMenuItem(
                 text = {
                     Text(
-                        parameter.name,
+                        parameterText,
                         fontWeight = if (parameter == selectedParameter) FontWeight.Bold else FontWeight.Normal
                     )
                 },
@@ -585,7 +806,10 @@ fun ParametersDropdownMenuMap(
                     expanded = false
                 },
                 colors = MenuDefaults.itemColors(
-                    textColor = if (parameter == selectedParameter) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                    textColor = if (parameter == selectedParameter)
+                        MaterialTheme.colorScheme.primary
+                    else
+                        MaterialTheme.colorScheme.onSurface
                 )
             )
         }

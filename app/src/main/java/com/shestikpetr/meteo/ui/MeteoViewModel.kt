@@ -3,8 +3,10 @@ package com.shestikpetr.meteo.ui
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.shestikpetr.meteo.data.StationWithLocation
 import com.shestikpetr.meteo.network.MeteoRepository
 import com.shestikpetr.meteo.network.SensorDataPoint
+import com.yandex.maps.mobile.BuildConfig
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -12,7 +14,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
-import com.shestikpetr.meteo.data.StationWithLocation
 
 enum class Parameters(private val unit: String) {
     TEMPERATURE("°C"),
@@ -54,16 +55,53 @@ class MeteoViewModel @Inject constructor(
     fun loadUserStations() {
         viewModelScope.launch {
             try {
-                val stations = meteoRepository.getUserStationsWithLocation()
                 _mapUiState.update { currentState ->
-                    currentState.copy(userStations = stations)
+                    currentState.copy(isLoadingLatestData = true)
                 }
-                // После получения списка станций загружаем последние данные для них
-                getLatestSensorData()
+
+                val stations = meteoRepository.getUserStationsWithLocation()
+
+                if (stations.isEmpty()) {
+                    Log.w("MeteoViewModel", "Получен пустой список станций")
+                }
+
+                _mapUiState.update { currentState ->
+                    currentState.copy(
+                        userStations = stations,
+                        isLoadingLatestData = false
+                    )
+                }
+
+                // Загружаем данные только если получили станции
+                if (stations.isNotEmpty()) {
+                    getLatestSensorData()
+                }
             } catch (e: Exception) {
-                Log.e("MeteoViewModel", "Error loading stations: ${e.message}")
+                Log.e("MeteoViewModel", "Ошибка загрузки станций: ${e.message}", e)
+
+                // Обеспечиваем корректное обновление UI даже при ошибке
+                _mapUiState.update { currentState ->
+                    currentState.copy(
+                        isLoadingLatestData = false,
+                        // При ошибке сохраняем предыдущий список станций, если он был
+                        userStations = if (currentState.userStations.isEmpty() && BuildConfig.DEBUG)
+                            createEmergencyStations() else currentState.userStations
+                    )
+                }
             }
         }
+    }
+
+    // Функция для создания аварийных тестовых станций, когда всё остальное не работает
+    private fun createEmergencyStations(): List<StationWithLocation> {
+        return listOf(
+            StationWithLocation(
+                stationNumber = "60000105",
+                name = "Томск (тестовая станция)",
+                latitude = 56.460850,
+                longitude = 84.962327
+            )
+        )
     }
 
     // Обновляем уровень масштабирования на карте
@@ -139,38 +177,33 @@ class MeteoViewModel @Inject constructor(
     private fun getLatestSensorData() {
         viewModelScope.launch {
             _mapUiState.update { currentUiState ->
-                currentUiState.copy(
-                    isLoadingLatestData = true
-                )
+                currentUiState.copy(isLoadingLatestData = true)
             }
 
             val dataMap = mutableMapOf<String, Double>()
             _mapUiState.value.userStations.forEach { station ->
-                val latestData = try {
-                    when (_mapUiState.value.selectedParameter) {
-                        Parameters.TEMPERATURE -> meteoRepository.getLatestSensorData(
-                            complexId = station.stationNumber,
-                            parameter = "4402"
-                        )
-
-                        Parameters.HUMIDITY -> meteoRepository.getLatestSensorData(
-                            complexId = station.stationNumber,
-                            parameter = "5402"
-                        )
-
-                        Parameters.PRESSURE -> meteoRepository.getLatestSensorData(
-                            complexId = station.stationNumber,
-                            parameter = "700"
-                        )
+                try {
+                    val parameterCode = when (_mapUiState.value.selectedParameter) {
+                        Parameters.TEMPERATURE -> "4402"
+                        Parameters.HUMIDITY -> "5402"
+                        Parameters.PRESSURE -> "700"
                     }
+
+                    val latestData = meteoRepository.getLatestSensorData(
+                        complexId = station.stationNumber,
+                        parameter = parameterCode
+                    )
+
+                    dataMap[station.stationNumber] = latestData
                 } catch (e: Exception) {
                     Log.e(
                         "MeteoViewModel",
-                        "Error fetching data for ${station.stationNumber}: ${e.message}"
+                        "Ошибка получения данных для ${station.stationNumber}: ${e.message}",
+                        e
                     )
-                    0.0
+                    // При ошибке записываем нулевое значение
+                    dataMap[station.stationNumber] = 0.0
                 }
-                dataMap[station.stationNumber] = latestData
             }
 
             _mapUiState.update { currentUiState ->
@@ -179,7 +212,7 @@ class MeteoViewModel @Inject constructor(
                     latestSensorData = dataMap
                 )
             }
-            Log.d("MeteoViewModel", "Данные получены ${_mapUiState.value.latestSensorData}")
+            Log.d("MeteoViewModel", "Данные получены: ${dataMap.size} значений")
         }
     }
 }

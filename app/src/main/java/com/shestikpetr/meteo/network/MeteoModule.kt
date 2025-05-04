@@ -36,7 +36,7 @@ object MeteoModule {
     @Singleton
     fun providesRetrofit(okHttpClient: OkHttpClient): Retrofit {
         return Retrofit.Builder()
-            .baseUrl("http://84.237.1.131:8085/api/") // Обновленный URL из app.py
+            .baseUrl("http://84.237.1.131:8085/api/")
             .client(okHttpClient)
             .addConverterFactory(GsonConverterFactory.create())
             .build()

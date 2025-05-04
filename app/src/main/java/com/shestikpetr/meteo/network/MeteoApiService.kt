@@ -86,9 +86,9 @@ data class ParameterInfo(
 
 // Информация о метеостанции
 data class StationInfo(
-    val stationNumber: String,
-    val name: String,
-    val location: String
+    val stationNumber: String?,
+    val name: String?,
+    val location: String?
 )
 
 // Метаданные параметра

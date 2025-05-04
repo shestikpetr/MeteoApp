@@ -3,6 +3,7 @@ package com.shestikpetr.meteo.network
 import android.content.Context
 import android.content.SharedPreferences
 import android.util.Base64
+import android.util.Log
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -36,6 +37,12 @@ class AuthManager @Inject constructor(
 
         val credentials = "$username:$password"
         return Base64.encodeToString(credentials.toByteArray(), Base64.NO_WRAP)
+    }
+
+    fun getAuthTokenDebug(): String {
+        val token = getAuthToken()
+        Log.d("AuthManager", "Текущий токен: ${token.take(10)}...")
+        return token
     }
 
     // Проверка наличия сохраненных учетных данных

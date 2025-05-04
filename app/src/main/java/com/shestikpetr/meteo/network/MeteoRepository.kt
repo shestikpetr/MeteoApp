@@ -2,6 +2,7 @@ package com.shestikpetr.meteo.network
 
 import android.util.Log
 import com.shestikpetr.meteo.data.StationWithLocation
+import com.yandex.maps.mobile.BuildConfig
 import javax.inject.Inject
 
 // Репозиторий метеоданных
@@ -72,30 +73,98 @@ class NetworkMeteoRepository @Inject constructor(
     }
 
     override suspend fun getUserStationsWithLocation(): List<StationWithLocation> {
-        val token = "Basic ${authManager.getAuthToken()}"
-        val stations = meteoApiService.getUserStations(token)
+        try {
+            val token = "Basic ${authManager.getAuthToken()}"
+            Log.d("MeteoRepository", "Запрос станций с токеном")
 
-        return stations.map { station ->
-            val coordinates = parseLocation(station.location)
-            StationWithLocation(
-                stationNumber = station.stationNumber,
-                name = station.name,
-                latitude = coordinates.first,
-                longitude = coordinates.second
-            )
+            val stations = meteoApiService.getUserStations(token)
+            Log.d("MeteoRepository", "Получено станций: ${stations.size}")
+
+            // Фильтруем станции с null полями перед маппингом
+            return stations
+                .filter { station ->
+                    val isValid =
+                        !station.stationNumber.isNullOrEmpty() && !station.location.isNullOrEmpty()
+                    if (!isValid) {
+                        Log.w("MeteoRepository", "Пропущена станция с неполными данными: $station")
+                    }
+                    isValid
+                }
+                .map { station ->
+                    val coordinates = parseLocation(station.location!!)
+                    StationWithLocation(
+                        stationNumber = station.stationNumber!!,
+                        name = station.name ?: station.stationNumber,
+                        latitude = coordinates.first,
+                        longitude = coordinates.second
+                    )
+                }
+        } catch (e: Exception) {
+            Log.e("NetworkMeteoRepository", "Ошибка при загрузке станций: ${e.message}", e)
+
+            // В режиме отладки возвращаем демо-станции
+            if (BuildConfig.DEBUG) {
+                Log.d("MeteoRepository", "Возвращаем тестовые станции для отладки")
+                return createDemoStations()
+            }
+
+            throw e
         }
+    }
+
+    // Функция для создания тестовых данных
+    private fun createDemoStations(): List<StationWithLocation> {
+        return listOf(
+            StationWithLocation(
+                stationNumber = "60000105",
+                name = "60000105",
+                latitude = 56.460850,
+                longitude = 84.962327
+            ),
+            StationWithLocation(
+                stationNumber = "60000104",
+                name = "60000104",
+                latitude = 56.460039,
+                longitude = 84.962282
+            ),
+            StationWithLocation(
+                stationNumber = "50000022",
+                name = "50000022",
+                latitude = 56.460337,
+                longitude = 84.961591
+            )
+        )
     }
 
     private fun parseLocation(location: String): Pair<Double, Double> {
         try {
-            val parts = location.split(",").map { it.trim().toDouble() }
+            if (location.isBlank()) {
+                Log.w("MeteoRepository", "Получена пустая строка с координатами")
+                return Pair(56.460337, 84.961591) // Значения по умолчанию
+            }
+
+            val parts = location.split(",")
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+                .map {
+                    try {
+                        it.toDouble()
+                    } catch (e: NumberFormatException) {
+                        Log.e("MeteoRepository", "Ошибка преобразования координаты: $it", e)
+                        0.0 // Значение по умолчанию при ошибке преобразования
+                    }
+                }
+
             if (parts.size >= 2) {
                 return Pair(parts[0], parts[1])
+            } else {
+                Log.w("MeteoRepository", "Неверный формат координат: $location")
             }
         } catch (e: Exception) {
-            Log.e("NetworkMeteoRepository", "Error parsing location: $location", e)
+            Log.e("MeteoRepository", "Ошибка при парсинге координат: $location", e)
         }
-        // В случае ошибки возвращаем значения по умолчанию
+
+        // Значения по умолчанию для центра Томска
         return Pair(56.460337, 84.961591)
     }
 }

@@ -26,23 +26,29 @@ class NetworkAuthRepository @Inject constructor(
 
     override suspend fun login(username: String, password: String): LoginResult {
         try {
-            Log.d("AuthRepository", "Attempting login for user: $username")
+            Log.d("AuthRepository", "Попытка входа для пользователя: $username")
             val credentials = UserCredentials(username, password)
             val response = meteoApiService.login(credentials)
 
             if (response.isSuccessful) {
                 val loginResponse = response.body()
                 if (loginResponse?.success == true) {
+                    Log.d("AuthRepository", "Успешный вход в систему")
                     authManager.saveCredentials(username, password)
                     return LoginResult.Success(loginResponse.token ?: "")
                 } else {
+                    Log.e("AuthRepository", "Ошибка входа: ${loginResponse?.error}")
                     return LoginResult.Error(loginResponse?.error ?: "Ошибка авторизации")
                 }
             } else {
+                Log.e(
+                    "AuthRepository",
+                    "Ошибка сервера: ${response.code()}, ${response.errorBody()?.string()}"
+                )
                 return LoginResult.Error("Ошибка сервера: ${response.code()}")
             }
         } catch (e: Exception) {
-            Log.e("AuthRepository", "Login error", e)
+            Log.e("AuthRepository", "Ошибка входа", e)
             return LoginResult.Error(e.message ?: "Неизвестная ошибка")
         }
     }

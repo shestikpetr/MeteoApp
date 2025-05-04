@@ -1,5 +1,6 @@
 package com.shestikpetr.meteo.ui.login
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.shestikpetr.meteo.network.AuthRepository
@@ -22,9 +23,17 @@ class LoginViewModel @Inject constructor(
     fun login(username: String, password: String) {
         viewModelScope.launch {
             try {
+                // Отображаем процесс загрузки
+                _loginState.value = null
+
                 val result = authRepository.login(username, password)
                 _loginState.value = result
+
+                if (result is LoginResult.Success) {
+                    Log.d("LoginViewModel", "Авторизация успешна")
+                }
             } catch (e: Exception) {
+                Log.e("LoginViewModel", "Ошибка авторизации: ${e.message}", e)
                 _loginState.value = LoginResult.Error(e.message ?: "Неизвестная ошибка")
             }
         }

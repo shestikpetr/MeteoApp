@@ -79,7 +79,10 @@ fun MeteoApp(
                 onCameraZoomChange = { zoom ->
                     viewModel.updateCameraZoom(zoom)
                 },
-                navController = navController
+                navController = navController,
+                onRefreshStations = {
+                    viewModel.loadUserStations()
+                }
             )
         }
 
