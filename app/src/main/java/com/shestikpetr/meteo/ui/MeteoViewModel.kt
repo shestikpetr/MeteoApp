@@ -8,6 +8,7 @@ import com.shestikpetr.meteo.network.MeteoRepository
 import com.shestikpetr.meteo.network.SensorDataPoint
 import com.yandex.maps.mobile.BuildConfig
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -189,12 +190,35 @@ class MeteoViewModel @Inject constructor(
                         Parameters.PRESSURE -> "700"
                     }
 
-                    val latestData = meteoRepository.getLatestSensorData(
-                        complexId = station.stationNumber,
-                        parameter = parameterCode
-                    )
+                    // Добавьте повторные попытки при ошибке соединения
+                    var attempts = 0
+                    var success = false
+                    var latestData = 0.0
 
-                    dataMap[station.stationNumber] = latestData
+                    while (attempts < 3 && !success) {
+                        try {
+                            latestData = meteoRepository.getLatestSensorData(
+                                complexId = station.stationNumber,
+                                parameter = parameterCode
+                            )
+                            success = true
+                        } catch (e: Exception) {
+                            if (e is java.net.ProtocolException &&
+                                e.message?.contains("unexpected end of stream") == true
+                            ) {
+                                attempts++
+                                delay(1000) // Подождать перед повторной попыткой
+                            } else {
+                                throw e
+                            }
+                        }
+                    }
+
+                    if (success) {
+                        dataMap[station.stationNumber] = latestData
+                    } else {
+                        dataMap[station.stationNumber] = 0.0
+                    }
                 } catch (e: Exception) {
                     Log.e(
                         "MeteoViewModel",

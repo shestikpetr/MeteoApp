@@ -27,7 +27,7 @@ object MeteoModule {
         return OkHttpClient.Builder()
             .addInterceptor(logging)
             .connectTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(45, TimeUnit.SECONDS)
             .retryOnConnectionFailure(true)
             .build()
     }

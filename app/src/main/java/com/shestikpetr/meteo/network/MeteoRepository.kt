@@ -49,7 +49,7 @@ class NetworkMeteoRepository @Inject constructor(
 
     override suspend fun getLatestSensorData(complexId: String, parameter: String): Double {
         val token = "Basic ${authManager.getAuthToken()}"
-        return meteoApiService.getLatestSensorData(complexId, parameter, token)
+        return meteoApiService.getLatestSensorData(complexId, parameter, token).value
     }
 
     override suspend fun getStationParameters(complexId: String): List<ParameterInfo> {

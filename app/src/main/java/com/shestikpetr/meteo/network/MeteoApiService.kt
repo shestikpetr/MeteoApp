@@ -8,6 +8,8 @@ import retrofit2.http.POST
 import retrofit2.http.Body
 import retrofit2.http.Header
 
+data class ValueResponse(val value: Double)
+
 // Интерфейс для запросов
 interface MeteoApiService {
     // Авторизация пользователя
@@ -30,7 +32,7 @@ interface MeteoApiService {
         @Path("complexId") complexId: String,       // Айди комплекса
         @Path("parameter") parameter: String,       // Параметр
         @Header("Authorization") authToken: String  // Токен авторизации
-    ): Double
+    ): ValueResponse
 
     // Получение списка доступных параметров для станции
     @GET("sensors/{complexId}/parameters")
