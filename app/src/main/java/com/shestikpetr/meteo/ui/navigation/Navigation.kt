@@ -2,6 +2,7 @@ package com.shestikpetr.meteo.ui.navigation
 
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -68,6 +69,13 @@ fun MeteoApp(
         }
 
         composable(Screen.Map.route) {
+            // Проверяем, загружены ли станции, если нет - загружаем
+            LaunchedEffect(Unit) {
+                if (mapUiState.userStations.isEmpty() && !mapUiState.isLoadingLatestData) {
+                    viewModel.loadUserStations()
+                }
+            }
+
             MapScreen(
                 selectedParameter = mapUiState.selectedParameter,
                 userStations = mapUiState.userStations,
@@ -82,6 +90,19 @@ fun MeteoApp(
                 navController = navController,
                 onRefreshStations = {
                     viewModel.loadUserStations()
+                },
+                onLogout = {
+                    // Выполняем logout
+                    loginViewModel.logout()
+
+                    // Очищаем данные в основном ViewModel
+                    viewModel.clearData()
+
+                    // Переходим на экран логина
+                    navController.navigate(Screen.Login.route) {
+                        popUpTo(Screen.Map.route) { inclusive = true }
+                        launchSingleTop = true
+                    }
                 }
             )
         }

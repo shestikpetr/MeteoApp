@@ -3,6 +3,7 @@ package com.shestikpetr.meteo.network
 import android.util.Log
 import com.shestikpetr.meteo.data.StationWithLocation
 import com.yandex.maps.mobile.BuildConfig
+import kotlinx.coroutines.delay
 import javax.inject.Inject
 
 // Репозиторий метеоданных
@@ -48,8 +49,42 @@ class NetworkMeteoRepository @Inject constructor(
     }
 
     override suspend fun getLatestSensorData(complexId: String, parameter: String): Double {
-        val token = "Basic ${authManager.getAuthToken()}"
-        return meteoApiService.getLatestSensorData(complexId, parameter, token).value
+        var lastException: Exception? = null
+
+        // Пробуем 3 раза с задержкой
+        repeat(3) { attempt ->
+            try {
+                val token = "Basic ${authManager.getAuthToken()}"
+                Log.d(
+                    "MeteoRepository",
+                    "Попытка ${attempt + 1}/3 для $complexId, параметр: $parameter"
+                )
+
+                val response = meteoApiService.getLatestSensorData(complexId, parameter, token)
+                Log.d("MeteoRepository", "Успешно получен ответ для $complexId: ${response.value}")
+
+                return response.value
+            } catch (e: Exception) {
+                lastException = e
+                Log.w(
+                    "MeteoRepository",
+                    "Попытка ${attempt + 1}/3 неудачна для $complexId: ${e.message}"
+                )
+
+                // Если это последняя попытка, не ждем
+                if (attempt < 2) {
+                    delay(1000) // Ждем 1 секунду перед следующей попыткой
+                }
+            }
+        }
+
+        // Если все попытки неудачны, возвращаем 0.0 вместо исключения
+        Log.e(
+            "MeteoRepository",
+            "Все попытки неудачны для $complexId, возвращаем 0.0",
+            lastException
+        )
+        return 0.0
     }
 
     override suspend fun getStationParameters(complexId: String): List<ParameterInfo> {

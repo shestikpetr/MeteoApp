@@ -1,5 +1,6 @@
 [versions]
-agp = "8.9.2"
+agp = "8.10.0"
+coreSplashscreen = "1.0.1"
 hiltAndroidCompiler = "2.48"
 hiltCommon = "1.2.0"
 kotlin = "2.0.0"
@@ -21,6 +22,7 @@ okhttp = "4.12.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
+androidx-core-splashscreen = { module = "androidx.core:core-splashscreen", version.ref = "coreSplashscreen" }
 androidx-hilt-common = { module = "androidx.hilt:hilt-common", version.ref = "hiltCommon" }
 androidx-hilt-compiler = { module = "androidx.hilt:hilt-compiler", version.ref = "hiltCommon" }
 dagger-hilt-android-compiler = { module = "com.google.dagger:hilt-android-compiler", version.ref = "hiltAndroidCompiler" }

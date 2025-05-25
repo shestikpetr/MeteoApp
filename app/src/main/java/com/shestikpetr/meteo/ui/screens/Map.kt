@@ -1,20 +1,64 @@
 package com.shestikpetr.meteo.ui.screens
 
-import androidx.compose.animation.animateContentSize
+import android.util.Log
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.BottomSheetScaffold
+import androidx.compose.material3.BottomSheetScaffoldState
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MenuDefaults
+import androidx.compose.material3.SheetState
+import androidx.compose.material3.SheetValue
+import androidx.compose.material3.Snackbar
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberStandardBottomSheetState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -43,7 +87,7 @@ import java.util.Locale
 import kotlin.math.pow
 import kotlin.math.sqrt
 
-@OptIn(YandexMapsComposeExperimentalApi::class, ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MapScreen(
     selectedParameter: Parameters,
@@ -53,7 +97,8 @@ fun MapScreen(
     onChangeMapParameter: (Parameters) -> Unit,
     onCameraZoomChange: (Float) -> Unit,
     navController: NavController,
-    onRefreshStations: () -> Unit
+    onRefreshStations: () -> Unit,
+    onLogout: () -> Unit
 ) {
     // State for error messages
     var errorMessage by remember { mutableStateOf<String?>(null) }
@@ -167,22 +212,24 @@ fun MapScreen(
                     .background(Color.Black.copy(alpha = 0.3f))
             )
 
-            // Back button to show at top left
             IconButton(
-                onClick = { navController.popBackStack() },
+                onClick = {
+                    Log.d("MapScreen", "Выход из системы")
+                    onLogout()
+                },
                 modifier = Modifier
                     .padding(start = 16.dp, top = statusBarPadding + 8.dp)
                     .size(40.dp)
                     .shadow(4.dp, CircleShape)
                     .background(
-                        MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
+                        MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.9f),
                         CircleShape
                     )
             ) {
                 Icon(
-                    Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Назад",
-                    tint = MaterialTheme.colorScheme.onSurface
+                    Icons.AutoMirrored.Filled.ExitToApp,
+                    contentDescription = "Выйти",
+                    tint = MaterialTheme.colorScheme.onErrorContainer
                 )
             }
 
@@ -547,6 +594,12 @@ fun ClusteredMapView(
     latestSensorData: Map<String, Double>,
     onMarkerClick: (String) -> Unit
 ) {
+    // Добавим отладочные логи
+    LaunchedEffect(latestSensorData) {
+        Log.d("ClusteredMapView", "Данные обновлены: $latestSensorData")
+        Log.d("ClusteredMapView", "Размер данных: ${latestSensorData.size}")
+    }
+
     // Threshold for clustering based on zoom level
     val clusterThreshold = when {
         zoomLevel < 10f -> 0.05
@@ -554,40 +607,70 @@ fun ClusteredMapView(
         else -> 0.0 // No clustering at high zoom levels
     }
 
-    // Group stations into clusters
-    val clusters = if (clusterThreshold > 0.0) {
-        createClusters(stations, clusterThreshold, latestSensorData, selectedParameter)
-    } else {
-        // Each station as separate cluster
-        stations.map { station ->
-            ClusterInfo(
-                stations = listOf(station),
-                latitude = station.latitude,
-                longitude = station.longitude,
-                averageValue = latestSensorData[station.stationNumber] ?: 0.0,
-                parameter = selectedParameter
-            )
+    // Group stations into clusters - ВАЖНО: добавляем все зависимости в remember
+    val clusters = remember(
+        stations,
+        clusterThreshold,
+        latestSensorData,
+        selectedParameter,
+        latestSensorData.hashCode()
+    ) {
+        Log.d("ClusteredMapView", "Пересчитываем кластеры")
+        Log.d("ClusteredMapView", "Текущие данные: $latestSensorData")
+
+        if (clusterThreshold > 0.0) {
+            createClusters(stations, clusterThreshold, latestSensorData, selectedParameter)
+        } else {
+            // Each station as separate cluster
+            stations.map { station ->
+                val value = latestSensorData[station.stationNumber] ?: 0.0
+                Log.d(
+                    "ClusteredMapView",
+                    "Создаем кластер для ${station.stationNumber} со значением $value"
+                )
+                ClusterInfo(
+                    stations = listOf(station),
+                    latitude = station.latitude,
+                    longitude = station.longitude,
+                    averageValue = value,
+                    parameter = selectedParameter
+                )
+            }
         }
     }
 
-    // Display clusters on map
+    Log.d("ClusteredMapView", "Отображаем ${clusters.size} кластеров")
     clusters.forEach { cluster ->
-        val placemarkState = rememberPlacemarkState(Point(cluster.latitude, cluster.longitude))
-
-        Placemark(
-            state = placemarkState,
-            icon = imageProvider(
-                size = DpSize(if (cluster.stations.size > 1) 100.dp else 80.dp, 40.dp)
-            ) {
-                ClusterMarker(cluster)
-            },
-            onTap = {
-                if (cluster.stations.size == 1) {
-                    onMarkerClick(cluster.stations.first().stationNumber)
-                }
-                true
-            }
+        Log.d(
+            "ClusteredMapView",
+            "Кластер: станции=${cluster.stations.map { it.stationNumber }}, значение=${cluster.averageValue}"
         )
+    }
+
+    // Display clusters on map - используем key для принудительного обновления
+    clusters.forEachIndexed { _, cluster ->
+        // Создаем уникальный ключ для каждого маркера
+        val markerKey =
+            "${cluster.stations.joinToString { it.stationNumber }}_${cluster.averageValue}_${selectedParameter.name}"
+
+        key(markerKey) {
+            val placemarkState = rememberPlacemarkState(Point(cluster.latitude, cluster.longitude))
+
+            Placemark(
+                state = placemarkState,
+                icon = imageProvider(
+                    size = DpSize(if (cluster.stations.size > 1) 100.dp else 80.dp, 40.dp)
+                ) {
+                    ClusterMarker(cluster = cluster)
+                },
+                onTap = {
+                    if (cluster.stations.size == 1) {
+                        onMarkerClick(cluster.stations.first().stationNumber)
+                    }
+                    true
+                }
+            )
+        }
     }
 }
 
@@ -632,10 +715,14 @@ private fun createClusters(
 
     return clusters.map { cluster ->
         val center = calculateClusterCenter(cluster)
-        val avgValue = cluster
-            .mapNotNull { latestSensorData[it.stationNumber] }
-            .takeIf { it.isNotEmpty() }
-            ?.average() ?: 0.0
+        val values = cluster.mapNotNull { station ->
+            latestSensorData[station.stationNumber]?.also { value ->
+                Log.d("createClusters", "Станция ${station.stationNumber}: значение $value")
+            }
+        }
+        val avgValue = if (values.isNotEmpty()) values.average() else 0.0
+
+        Log.d("createClusters", "Кластер из ${cluster.size} станций, среднее значение: $avgValue")
 
         ClusterInfo(
             stations = cluster,
@@ -661,6 +748,12 @@ private fun calculateDistance(lat1: Double, lon1: Double, lat2: Double, lon2: Do
 
 @Composable
 private fun ClusterMarker(cluster: ClusterInfo) {
+    // Логируем для отладки
+    Log.d(
+        "ClusterMarker",
+        "Отрисовка маркера: станции=${cluster.stations.map { it.stationNumber }}, значение=${cluster.averageValue}"
+    )
+
     // Calculate color based on value (example: blue-to-red gradient)
     val markerColor = getColorForValue(
         value = cluster.averageValue,
@@ -671,31 +764,34 @@ private fun ClusterMarker(cluster: ClusterInfo) {
         modifier = Modifier
             .shadow(4.dp, RoundedCornerShape(12.dp))
             .background(
-                MaterialTheme.colorScheme.surfaceVariant,
+                Color.White, // Используем белый фон для лучшей видимости
                 RoundedCornerShape(12.dp)
             )
             .border(
-                1.dp,
+                2.dp, // Увеличиваем толщину рамки
                 markerColor,
                 RoundedCornerShape(12.dp)
             )
             .padding(horizontal = 8.dp, vertical = 6.dp)
-            .animateContentSize()
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
-                text = String.format(Locale.getDefault(), "%.1f", cluster.averageValue) +
-                        " ${cluster.parameter.getUnit()}",
+                text = if (cluster.averageValue > 0) {
+                    String.format(Locale.getDefault(), "%.1f", cluster.averageValue) +
+                            " ${cluster.parameter.getUnit()}"
+                } else {
+                    "—" // Показываем прочерк вместо 0.0
+                },
                 fontSize = 14.sp,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                fontWeight = FontWeight.Bold, // Добавляем жирный шрифт
+                color = Color.Black // Используем черный цвет для контраста
             )
 
             if (cluster.stations.size > 1) {
                 Text(
                     text = "(${cluster.stations.size} точек)",
                     fontSize = 10.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                    color = Color.Gray
                 )
             }
         }

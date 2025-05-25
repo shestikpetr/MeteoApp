@@ -28,7 +28,7 @@ import kotlinx.coroutines.delay
 @Composable
 fun SplashScreen(onSplashFinished: () -> Unit) {
     LaunchedEffect(Unit) {
-        delay(1500) // Задержка 1.5 сек
+        delay(800) // Сокращаем до 0.8 сек
         onSplashFinished()
     }
 
@@ -37,13 +37,12 @@ fun SplashScreen(onSplashFinished: () -> Unit) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        // Здесь нужно заменить на ваш логотип
         val infiniteTransition = rememberInfiniteTransition()
         val alpha by infiniteTransition.animateFloat(
-            initialValue = 0.2f,
+            initialValue = 0.3f,
             targetValue = 1.0f,
             animationSpec = infiniteRepeatable(
-                animation = tween(1000),
+                animation = tween(800), // Ускоряем анимацию
                 repeatMode = RepeatMode.Reverse
             )
         )

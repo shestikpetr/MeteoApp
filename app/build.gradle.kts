@@ -50,6 +50,8 @@ android {
 }
 
 dependencies {
+    // Splash Screen API
+    implementation(libs.androidx.core.splashscreen)
 
     // Chart
     implementation(libs.yml.ycharts)
@@ -67,8 +69,10 @@ dependencies {
     implementation(libs.androidx.hilt.common)
     kapt(libs.androidx.hilt.compiler)
 
+    // Yandex Maps
     implementation(libs.yandex.mapkit.kmp)
     implementation(libs.yandex.mapkit.kmp.compose)
+
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
