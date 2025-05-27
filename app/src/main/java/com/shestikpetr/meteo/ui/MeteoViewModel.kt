@@ -51,6 +51,14 @@ class MeteoViewModel @Inject constructor(
     private val _chartUiState: MutableStateFlow<ChartUiState> = MutableStateFlow(ChartUiState())
     val chartUiState: StateFlow<ChartUiState> = _chartUiState.asStateFlow()
 
+    // Кеш для хранения последних успешных значений по станциям и параметрам
+    private val sensorDataCache = mutableMapOf<String, Double>()
+
+    // Генерация ключа для кеша
+    private fun getCacheKey(stationId: String, parameter: Parameters): String {
+        return "${stationId}_${parameter.name}"
+    }
+
     // Загружаем список станций пользователя после авторизации
     fun loadUserStations() {
         viewModelScope.launch {
@@ -194,8 +202,8 @@ class MeteoViewModel @Inject constructor(
                 currentUiState.copy(isLoadingLatestData = true)
             }
 
-            val dataMap = mutableMapOf<String, Double>()
             val currentStations = _mapUiState.value.userStations
+            val selectedParameter = _mapUiState.value.selectedParameter
 
             if (currentStations.isEmpty()) {
                 Log.w("MeteoViewModel", "Нет станций для загрузки данных")
@@ -207,8 +215,34 @@ class MeteoViewModel @Inject constructor(
 
             Log.d("MeteoViewModel", "Загружаем данные для ${currentStations.size} станций")
 
+            // Сначала берем кешированные значения и сразу показываем их
+            val dataMap = mutableMapOf<String, Double>()
             currentStations.forEach { station ->
-                val parameterCode = when (_mapUiState.value.selectedParameter) {
+                val cacheKey = getCacheKey(station.stationNumber, selectedParameter)
+                val cachedValue = sensorDataCache[cacheKey]
+                if (cachedValue != null) {
+                    dataMap[station.stationNumber] = cachedValue
+                    Log.d(
+                        "MeteoViewModel",
+                        "Использую кешированное значение для ${station.stationNumber}: $cachedValue"
+                    )
+                }
+            }
+
+            // Сразу обновляем UI с кешированными данными (если есть)
+            if (dataMap.isNotEmpty()) {
+                _mapUiState.update { currentUiState ->
+                    currentUiState.copy(
+                        latestSensorData = dataMap.toMap(),
+                        isLoadingLatestData = true // Оставляем загрузку, так как еще обновляем данные
+                    )
+                }
+                Log.d("MeteoViewModel", "Показаны кешированные данные: $dataMap")
+            }
+
+            // Затем обновляем данные с сервера для каждой станции
+            currentStations.forEach { station ->
+                val parameterCode = when (selectedParameter) {
                     Parameters.TEMPERATURE -> "4402"
                     Parameters.HUMIDITY -> "5402"
                     Parameters.PRESSURE -> "700"
@@ -219,18 +253,75 @@ class MeteoViewModel @Inject constructor(
                     "Запрос данных для ${station.stationNumber}, параметр: $parameterCode"
                 )
 
-                // Repository теперь сам обрабатывает retry и возвращает 0.0 при ошибке
-                val latestData = meteoRepository.getLatestSensorData(
-                    complexId = station.stationNumber,
-                    parameter = parameterCode
-                )
+                try {
+                    val latestData = meteoRepository.getLatestSensorData(
+                        complexId = station.stationNumber,
+                        parameter = parameterCode
+                    )
 
-                dataMap[station.stationNumber] = latestData
-                Log.d("MeteoViewModel", "Получены данные для ${station.stationNumber}: $latestData")
+                    if (latestData > 0.0) { // Только если получили валидные данные
+                        dataMap[station.stationNumber] = latestData
+                        // Сохраняем в кеш
+                        val cacheKey = getCacheKey(station.stationNumber, selectedParameter)
+                        sensorDataCache[cacheKey] = latestData
+                        Log.d(
+                            "MeteoViewModel",
+                            "Получены и сохранены данные для ${station.stationNumber}: $latestData"
+                        )
+
+                        // ВАЖНО: Обновляем UI сразу после получения каждого значения
+                        _mapUiState.update { currentUiState ->
+                            currentUiState.copy(
+                                latestSensorData = dataMap.toMap()
+                            )
+                        }
+                    } else {
+                        // Если данные не получены (вернулся 0.0), используем кешированное значение
+                        val cacheKey = getCacheKey(station.stationNumber, selectedParameter)
+                        val cachedValue = sensorDataCache[cacheKey]
+                        if (cachedValue != null && cachedValue > 0.0) {
+                            dataMap[station.stationNumber] = cachedValue
+                            Log.d(
+                                "MeteoViewModel",
+                                "Используем кешированное значение для ${station.stationNumber}: $cachedValue"
+                            )
+                        } else {
+                            // Если кеша нет, устанавливаем 0.0
+                            dataMap[station.stationNumber] = 0.0
+                            Log.d(
+                                "MeteoViewModel",
+                                "Нет данных и кеша для ${station.stationNumber}, устанавливаем 0.0"
+                            )
+                        }
+                    }
+
+                } catch (e: Exception) {
+                    Log.e(
+                        "MeteoViewModel",
+                        "Ошибка получения данных для ${station.stationNumber}: ${e.message}"
+                    )
+                    // При ошибке используем кешированное значение
+                    val cacheKey = getCacheKey(station.stationNumber, selectedParameter)
+                    val cachedValue = sensorDataCache[cacheKey]
+                    if (cachedValue != null && cachedValue > 0.0) {
+                        dataMap[station.stationNumber] = cachedValue
+                        Log.d(
+                            "MeteoViewModel",
+                            "При ошибке используем кеш для ${station.stationNumber}: $cachedValue"
+                        )
+                    } else {
+                        dataMap[station.stationNumber] = 0.0
+                        Log.d(
+                            "MeteoViewModel",
+                            "При ошибке нет кеша для ${station.stationNumber}, устанавливаем 0.0"
+                        )
+                    }
+                }
             }
 
-            Log.d("MeteoViewModel", "Обновляем UI с данными: ${dataMap.size} значений")
-            Log.d("MeteoViewModel", "Полученные данные: $dataMap")
+            // Финальное обновление UI
+            Log.d("MeteoViewModel", "Финальное обновление UI с данными: ${dataMap.size} значений")
+            Log.d("MeteoViewModel", "Финальные данные: $dataMap")
 
             _mapUiState.update { currentUiState ->
                 currentUiState.copy(
@@ -241,9 +332,17 @@ class MeteoViewModel @Inject constructor(
         }
     }
 
+    // Метод для очистки кеша (например, при смене пользователя)
+    fun clearCache() {
+        Log.d("MeteoViewModel", "Очистка кеша данных")
+        sensorDataCache.clear()
+    }
 
     fun clearData() {
         Log.d("MeteoViewModel", "Очистка данных при выходе")
+
+        // Очищаем кеш при выходе
+        clearCache()
 
         _mapUiState.update {
             MapUiState() // Возвращаем к начальному состоянию
@@ -252,5 +351,42 @@ class MeteoViewModel @Inject constructor(
         _chartUiState.update {
             ChartUiState() // Возвращаем к начальному состоянию
         }
+    }
+
+    // Метод для принудительного обновления данных (например, по pull-to-refresh)
+    fun forceRefreshData() {
+        Log.d("MeteoViewModel", "Принудительное обновление данных")
+        if (_mapUiState.value.userStations.isNotEmpty()) {
+            getLatestSensorData()
+        } else {
+            loadUserStations()
+        }
+    }
+
+    // Метод для получения информации о кеше (для отладки)
+    fun getCacheInfo(): Map<String, Any> {
+        return mapOf(
+            "cacheSize" to sensorDataCache.size,
+            "cachedValues" to sensorDataCache.toMap()
+        )
+    }
+
+    // Типобезопасный метод для получения кешированных значений
+    fun getCachedValues(): Map<String, Double> {
+        return sensorDataCache.toMap()
+    }
+
+    // Метод для проверки, есть ли кешированные данные для станции и параметра
+    fun hasCachedData(stationId: String, parameter: Parameters): Boolean {
+        val cacheKey = getCacheKey(stationId, parameter)
+        return sensorDataCache.containsKey(cacheKey)
+    }
+
+    // Метод для получения списка станций с кешированными данными для текущего параметра
+    fun getCachedStationsForParameter(parameter: Parameters): Set<String> {
+        return sensorDataCache.keys
+            .filter { it.endsWith("_${parameter.name}") }
+            .map { it.substringBefore("_${parameter.name}") }
+            .toSet()
     }
 }

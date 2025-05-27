@@ -103,7 +103,8 @@ fun MeteoApp(
                         popUpTo(Screen.Map.route) { inclusive = true }
                         launchSingleTop = true
                     }
-                }
+                },
+                viewModel = viewModel // Передаем ViewModel
             )
         }
 

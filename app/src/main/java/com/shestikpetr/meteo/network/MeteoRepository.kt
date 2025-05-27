@@ -4,6 +4,8 @@ import android.util.Log
 import com.shestikpetr.meteo.data.StationWithLocation
 import com.yandex.maps.mobile.BuildConfig
 import kotlinx.coroutines.delay
+import okhttp3.OkHttpClient
+import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 
 // Репозиторий метеоданных
@@ -64,17 +66,53 @@ class NetworkMeteoRepository @Inject constructor(
                 Log.d("MeteoRepository", "Успешно получен ответ для $complexId: ${response.value}")
 
                 return response.value
+            } catch (e: retrofit2.HttpException) {
+                // HTTP ошибка
+                lastException = e
+                Log.w("MeteoRepository", "HTTP ошибка ${e.code()} для $complexId: ${e.message()}")
+
+                try {
+                    val errorBody = e.response()?.errorBody()?.string()
+                    Log.w("MeteoRepository", "Тело ошибки: $errorBody")
+                } catch (bodyException: Exception) {
+                    Log.w(
+                        "MeteoRepository",
+                        "Не удалось прочитать тело ошибки: ${bodyException.message}"
+                    )
+                }
+            } catch (e: com.google.gson.JsonSyntaxException) {
+                // Ошибка парсинга JSON
+                lastException = e
+                Log.w("MeteoRepository", "Ошибка парсинга JSON для $complexId: ${e.message}")
+
+                try {
+                    val rawResponse = getRawLatestData(complexId, parameter)
+                    if (rawResponse != null) {
+                        Log.d("MeteoRepository", "Получен raw ответ: '$rawResponse'")
+                        val extractedValue = extractValueFromResponse(rawResponse)
+                        if (extractedValue != null) {
+                            Log.d("MeteoRepository", "Успешно извлечено значение: $extractedValue")
+                            return extractedValue
+                        }
+                    }
+                } catch (rawException: Exception) {
+                    Log.e("MeteoRepository", "Ошибка получения raw данных: ${rawException.message}")
+                }
+            } catch (e: java.net.ProtocolException) {
+                // Ошибка протокола
+                lastException = e
+                Log.w("MeteoRepository", "Ошибка протокола для $complexId: ${e.message}")
             } catch (e: Exception) {
                 lastException = e
                 Log.w(
                     "MeteoRepository",
                     "Попытка ${attempt + 1}/3 неудачна для $complexId: ${e.message}"
                 )
+            }
 
-                // Если это последняя попытка, не ждем
-                if (attempt < 2) {
-                    delay(1000) // Ждем 1 секунду перед следующей попыткой
-                }
+            // Если это последняя попытка, не ждем
+            if (attempt < 2) {
+                delay(1000) // Ждем 1 секунду перед следующей попыткой
             }
         }
 
@@ -85,6 +123,49 @@ class NetworkMeteoRepository @Inject constructor(
             lastException
         )
         return 0.0
+    }
+
+    private fun getRawLatestData(complexId: String, parameter: String): String? {
+        return try {
+            val token = "Basic ${authManager.getAuthToken()}"
+            val url = "http://84.237.1.131:8085/api/sensors/$complexId/$parameter/latest"
+
+            val client = OkHttpClient.Builder()
+                .connectTimeout(10, TimeUnit.SECONDS)
+                .readTimeout(10, TimeUnit.SECONDS)
+                .build()
+
+            val request = okhttp3.Request.Builder()
+                .url(url)
+                .addHeader("Authorization", token)
+                .build()
+
+            val response = client.newCall(request).execute()
+            val responseBody = response.body?.string()
+
+            Log.d("MeteoRepository", "Raw HTTP ответ: '$responseBody'")
+            responseBody
+        } catch (e: Exception) {
+            Log.e("MeteoRepository", "Ошибка получения raw ответа: ${e.message}")
+            null
+        }
+    }
+
+    private fun extractValueFromResponse(response: String): Double? {
+        return try {
+            if (response.trim().startsWith("{")) {
+                val gson = com.google.gson.Gson()
+                val jsonObject = gson.fromJson(response, com.google.gson.JsonObject::class.java)
+                jsonObject.get("value")?.asDouble
+            } else {
+                val numberPattern = "-?\\d+(?:\\.\\d+)?".toRegex()
+                val match = numberPattern.find(response.trim())
+                match?.value?.toDouble()
+            }
+        } catch (e: Exception) {
+            Log.e("MeteoRepository", "Ошибка извлечения значения из '$response': ${e.message}")
+            null
+        }
     }
 
     override suspend fun getStationParameters(complexId: String): List<ParameterInfo> {

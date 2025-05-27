@@ -55,6 +55,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -72,6 +73,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.shestikpetr.meteo.data.StationWithLocation
+import com.shestikpetr.meteo.ui.MeteoViewModel
 import com.shestikpetr.meteo.ui.Parameters
 import com.shestikpetr.meteo.ui.navigation.Screen
 import kotlinx.coroutines.launch
@@ -98,7 +100,8 @@ fun MapScreen(
     onCameraZoomChange: (Float) -> Unit,
     navController: NavController,
     onRefreshStations: () -> Unit,
-    onLogout: () -> Unit
+    onLogout: () -> Unit,
+    viewModel: MeteoViewModel
 ) {
     // State for error messages
     var errorMessage by remember { mutableStateOf<String?>(null) }
@@ -187,21 +190,27 @@ fun MapScreen(
         sheetDragHandle = null
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
-            // Main map content
             YandexMap(
                 cameraPositionState = cameraPositionState,
                 modifier = Modifier.fillMaxSize()
             ) {
+                // Получаем список станций с кешированными данными для текущего параметра
+                val cachedStations = viewModel.getCachedStationsForParameter(selectedParameter)
+
+                Log.d("MapScreen", "Кешированные станции для $selectedParameter: $cachedStations")
+
                 // Display stations with clustering based on zoom level
                 ClusteredMapView(
                     stations = userStations,
                     zoomLevel = cameraPositionState.position.zoom,
                     selectedParameter = selectedParameter,
-                    latestSensorData = latestSensorData
-                ) { stationId ->
-                    // Navigate to chart screen when station marker is clicked
-                    navController.navigate("${Screen.Chart.route}/$stationId")
-                }
+                    latestSensorData = latestSensorData,
+                    cachedStations = cachedStations,
+                    onMarkerClick = { stationId ->
+                        // Navigate to chart screen when station marker is clicked
+                        navController.navigate("${Screen.Chart.route}/$stationId")
+                    }
+                )
             }
 
             // Status bar overlay for better visibility
@@ -282,7 +291,7 @@ fun MapScreen(
                 Box(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
-                        .padding(bottom = 80.dp)
+                        .padding(bottom = 100.dp)
                         .shadow(4.dp, RoundedCornerShape(24.dp))
                         .background(
                             MaterialTheme.colorScheme.surface,
@@ -592,12 +601,19 @@ fun ClusteredMapView(
     zoomLevel: Float,
     selectedParameter: Parameters,
     latestSensorData: Map<String, Double>,
-    onMarkerClick: (String) -> Unit
+    onMarkerClick: (String) -> Unit,
+    cachedStations: Set<String> = emptySet()
 ) {
+    // Принудительное обновление - создаем ключ который изменяется при обновлении данных
+    val updateKey by remember(latestSensorData, selectedParameter) {
+        mutableLongStateOf(System.currentTimeMillis())
+    }
+
     // Добавим отладочные логи
-    LaunchedEffect(latestSensorData) {
-        Log.d("ClusteredMapView", "Данные обновлены: $latestSensorData")
+    LaunchedEffect(latestSensorData, updateKey) {
+        Log.d("ClusteredMapView", "Данные обновлены (key=$updateKey): $latestSensorData")
         Log.d("ClusteredMapView", "Размер данных: ${latestSensorData.size}")
+        Log.d("ClusteredMapView", "Кешированные станции: $cachedStations")
     }
 
     // Threshold for clustering based on zoom level
@@ -607,33 +623,42 @@ fun ClusteredMapView(
         else -> 0.0 // No clustering at high zoom levels
     }
 
-    // Group stations into clusters - ВАЖНО: добавляем все зависимости в remember
+    // Group stations into clusters - ВАЖНО: добавляем updateKey для принудительного пересчета
     val clusters = remember(
         stations,
         clusterThreshold,
         latestSensorData,
         selectedParameter,
-        latestSensorData.hashCode()
+        cachedStations,
+        updateKey // Добавляем updateKey
     ) {
-        Log.d("ClusteredMapView", "Пересчитываем кластеры")
+        Log.d("ClusteredMapView", "Пересчитываем кластеры (updateKey=$updateKey)")
         Log.d("ClusteredMapView", "Текущие данные: $latestSensorData")
 
         if (clusterThreshold > 0.0) {
-            createClusters(stations, clusterThreshold, latestSensorData, selectedParameter)
+            createClusters(
+                stations,
+                clusterThreshold,
+                latestSensorData,
+                selectedParameter,
+                cachedStations
+            )
         } else {
             // Each station as separate cluster
             stations.map { station ->
                 val value = latestSensorData[station.stationNumber] ?: 0.0
+                val isCached = cachedStations.contains(station.stationNumber)
                 Log.d(
                     "ClusteredMapView",
-                    "Создаем кластер для ${station.stationNumber} со значением $value"
+                    "Создаем кластер для ${station.stationNumber} со значением $value (кешировано: $isCached)"
                 )
                 ClusterInfo(
                     stations = listOf(station),
                     latitude = station.latitude,
                     longitude = station.longitude,
                     averageValue = value,
-                    parameter = selectedParameter
+                    parameter = selectedParameter,
+                    isCachedData = isCached
                 )
             }
         }
@@ -643,15 +668,15 @@ fun ClusteredMapView(
     clusters.forEach { cluster ->
         Log.d(
             "ClusteredMapView",
-            "Кластер: станции=${cluster.stations.map { it.stationNumber }}, значение=${cluster.averageValue}"
+            "Кластер: станции=${cluster.stations.map { it.stationNumber }}, значение=${cluster.averageValue}, кешировано=${cluster.isCachedData}"
         )
     }
 
-    // Display clusters on map - используем key для принудительного обновления
+    // Display clusters on map - используем updateKey для принудительного обновления
     clusters.forEachIndexed { _, cluster ->
-        // Создаем уникальный ключ для каждого маркера
+        // Создаем уникальный ключ для каждого маркера включая updateKey
         val markerKey =
-            "${cluster.stations.joinToString { it.stationNumber }}_${cluster.averageValue}_${selectedParameter.name}"
+            "${cluster.stations.joinToString { it.stationNumber }}_${cluster.averageValue}_${selectedParameter.name}_${cluster.isCachedData}_$updateKey"
 
         key(markerKey) {
             val placemarkState = rememberPlacemarkState(Point(cluster.latitude, cluster.longitude))
@@ -661,7 +686,10 @@ fun ClusteredMapView(
                 icon = imageProvider(
                     size = DpSize(if (cluster.stations.size > 1) 100.dp else 80.dp, 40.dp)
                 ) {
-                    ClusterMarker(cluster = cluster)
+                    ClusterMarker(
+                        cluster = cluster,
+                        isCachedData = cluster.isCachedData
+                    )
                 },
                 onTap = {
                     if (cluster.stations.size == 1) {
@@ -679,7 +707,8 @@ data class ClusterInfo(
     val latitude: Double,
     val longitude: Double,
     val averageValue: Double,
-    val parameter: Parameters
+    val parameter: Parameters,
+    val isCachedData: Boolean = false // Новое поле для индикации кешированных данных
 )
 
 // Create clusters from stations based on proximity
@@ -687,7 +716,8 @@ private fun createClusters(
     stations: List<StationWithLocation>,
     threshold: Double,
     latestSensorData: Map<String, Double>,
-    parameter: Parameters
+    parameter: Parameters,
+    cachedStations: Set<String>
 ): List<ClusterInfo> {
     val clusters = mutableListOf<MutableList<StationWithLocation>>()
 
@@ -722,14 +752,23 @@ private fun createClusters(
         }
         val avgValue = if (values.isNotEmpty()) values.average() else 0.0
 
-        Log.d("createClusters", "Кластер из ${cluster.size} станций, среднее значение: $avgValue")
+        // Проверяем, есть ли в кластере кешированные данные
+        val hasAnyCachedData = cluster.any { station ->
+            cachedStations.contains(station.stationNumber)
+        }
+
+        Log.d(
+            "createClusters",
+            "Кластер из ${cluster.size} станций, среднее значение: $avgValue, есть кеш: $hasAnyCachedData"
+        )
 
         ClusterInfo(
             stations = cluster,
             latitude = center.first,
             longitude = center.second,
             averageValue = avgValue,
-            parameter = parameter
+            parameter = parameter,
+            isCachedData = hasAnyCachedData
         )
     }
 }
@@ -747,46 +786,80 @@ private fun calculateDistance(lat1: Double, lon1: Double, lat2: Double, lon2: Do
 }
 
 @Composable
-private fun ClusterMarker(cluster: ClusterInfo) {
-    // Логируем для отладки
+private fun ClusterMarker(
+    cluster: ClusterInfo,
+    isCachedData: Boolean = false
+) {
+    // Логируем каждую перерисовку маркера
     Log.d(
         "ClusterMarker",
-        "Отрисовка маркера: станции=${cluster.stations.map { it.stationNumber }}, значение=${cluster.averageValue}"
+        "Перерисовка маркера: станции=${cluster.stations.map { it.stationNumber }}, " +
+                "значение=${cluster.averageValue}, кешировано=$isCachedData, время=${System.currentTimeMillis()}"
     )
 
-    // Calculate color based on value (example: blue-to-red gradient)
+    // Calculate color based on value
     val markerColor = getColorForValue(
         value = cluster.averageValue,
         parameter = cluster.parameter
     )
 
+    // Цвет рамки - если данные кешированы, делаем рамку немного другого оттенка
+    val borderColor = if (isCachedData) {
+        markerColor.copy(alpha = 0.8f) // Немного прозрачнее для кешированных данных
+    } else {
+        markerColor
+    }
+
+    // Цвет фона - для кешированных данных делаем немного сероватым
+    val backgroundColor = if (isCachedData) {
+        Color.White.copy(alpha = 0.95f)
+    } else {
+        Color.White
+    }
+
     Box(
         modifier = Modifier
             .shadow(4.dp, RoundedCornerShape(12.dp))
             .background(
-                Color.White, // Используем белый фон для лучшей видимости
+                backgroundColor,
                 RoundedCornerShape(12.dp)
             )
             .border(
-                2.dp, // Увеличиваем толщину рамки
-                markerColor,
+                2.dp,
+                borderColor,
                 RoundedCornerShape(12.dp)
             )
             .padding(horizontal = 8.dp, vertical = 6.dp)
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            // Основной текст со значением
             Text(
-                text = if (cluster.averageValue > 0) {
+                text = if (cluster.averageValue > 0.001) { // Показываем даже отрицательные малые значения
+                    String.format(Locale.getDefault(), "%.1f", cluster.averageValue) +
+                            " ${cluster.parameter.getUnit()}"
+                } else if (cluster.averageValue < -0.001) {
                     String.format(Locale.getDefault(), "%.1f", cluster.averageValue) +
                             " ${cluster.parameter.getUnit()}"
                 } else {
-                    "—" // Показываем прочерк вместо 0.0
+                    "—" // Показываем прочерк только для точного 0.0
                 },
                 fontSize = 14.sp,
-                fontWeight = FontWeight.Bold, // Добавляем жирный шрифт
-                color = Color.Black // Используем черный цвет для контраста
+                fontWeight = FontWeight.Bold,
+                color = Color.Black
             )
 
+            /*
+            // Индикатор кешированных данных
+            if (isCachedData && cluster.averageValue != 0.0) {
+                Text(
+                    text = "💾", // Эмодзи дискеты для кешированных данных
+                    fontSize = 8.sp,
+                    modifier = Modifier.padding(top = 1.dp)
+                )
+            }
+            */
+
+            // Счетчик станций для кластеров
             if (cluster.stations.size > 1) {
                 Text(
                     text = "(${cluster.stations.size} точек)",
