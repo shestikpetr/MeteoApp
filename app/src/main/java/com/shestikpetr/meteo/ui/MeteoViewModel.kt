@@ -3,6 +3,7 @@ package com.shestikpetr.meteo.ui
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import co.yml.charts.common.extensions.isNotNull
 import com.shestikpetr.meteo.data.StationWithLocation
 import com.shestikpetr.meteo.network.MeteoRepository
 import com.shestikpetr.meteo.network.SensorDataPoint
@@ -259,7 +260,7 @@ class MeteoViewModel @Inject constructor(
                         parameter = parameterCode
                     )
 
-                    if (latestData > 0.0) { // Только если получили валидные данные
+                    if (latestData > -100) { // Только если получили валидные данные
                         dataMap[station.stationNumber] = latestData
                         // Сохраняем в кеш
                         val cacheKey = getCacheKey(station.stationNumber, selectedParameter)
@@ -276,10 +277,10 @@ class MeteoViewModel @Inject constructor(
                             )
                         }
                     } else {
-                        // Если данные не получены (вернулся 0.0), используем кешированное значение
+                        // Если данные не получены (вернулся -100), используем кешированное значение
                         val cacheKey = getCacheKey(station.stationNumber, selectedParameter)
                         val cachedValue = sensorDataCache[cacheKey]
-                        if (cachedValue != null && cachedValue > 0.0) {
+                        if (cachedValue != null && cachedValue > -100) {
                             dataMap[station.stationNumber] = cachedValue
                             Log.d(
                                 "MeteoViewModel",
@@ -303,7 +304,7 @@ class MeteoViewModel @Inject constructor(
                     // При ошибке используем кешированное значение
                     val cacheKey = getCacheKey(station.stationNumber, selectedParameter)
                     val cachedValue = sensorDataCache[cacheKey]
-                    if (cachedValue != null && cachedValue > 0.0) {
+                    if (cachedValue != null && cachedValue > -100) {
                         dataMap[station.stationNumber] = cachedValue
                         Log.d(
                             "MeteoViewModel",

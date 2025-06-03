@@ -119,10 +119,10 @@ class NetworkMeteoRepository @Inject constructor(
         // Если все попытки неудачны, возвращаем 0.0 вместо исключения
         Log.e(
             "MeteoRepository",
-            "Все попытки неудачны для $complexId, возвращаем 0.0",
+            "Все попытки неудачны для $complexId, возвращаем -1000",
             lastException
         )
-        return 0.0
+        return -1000.0
     }
 
     private fun getRawLatestData(complexId: String, parameter: String): String? {

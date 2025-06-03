@@ -176,19 +176,12 @@ fun ChartScreen(
                 exit = fadeOut()
             ) {
                 Card(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 8.dp),
                     elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
                 ) {
                     Column(modifier = Modifier.padding(8.dp)) {
-                        Text(
-                            text = "График ${getParameterDisplayName(selectedChartParameter)}",
-                            style = MaterialTheme.typography.titleMedium,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(bottom = 8.dp),
-                            textAlign = TextAlign.Center
-                        )
-
                         SensorDataChart(
                             sensorData = sensorData,
                             title = "График ${getParameterDisplayName(selectedChartParameter)}",

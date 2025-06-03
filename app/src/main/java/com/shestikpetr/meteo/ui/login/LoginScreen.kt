@@ -1,5 +1,6 @@
 package com.shestikpetr.meteo.ui.login
 
+import android.util.Log
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
@@ -107,10 +108,11 @@ fun LoginScreen(
         errorMessage?.let {
             Spacer(modifier = Modifier.height(16.dp))
             Text(
-                text = it,
+                text = "Повторите попытку позже",
                 color = MaterialTheme.colorScheme.error,
                 style = MaterialTheme.typography.bodyMedium
             )
+            Log.d("Login Error", it)
         }
     }
 }

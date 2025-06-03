@@ -1,5 +1,5 @@
 [versions]
-agp = "8.10.0"
+agp = "8.10.1"
 coreSplashscreen = "1.0.1"
 hiltAndroidCompiler = "2.48"
 hiltCommon = "1.2.0"

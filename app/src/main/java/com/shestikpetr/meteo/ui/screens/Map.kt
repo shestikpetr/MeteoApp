@@ -841,7 +841,7 @@ private fun ClusterMarker(
                     String.format(Locale.getDefault(), "%.1f", cluster.averageValue) +
                             " ${cluster.parameter.getUnit()}"
                 } else {
-                    "—" // Показываем прочерк только для точного 0.0
+                    "0.0" // Показываем прочерк только для точного 0.0
                 },
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
