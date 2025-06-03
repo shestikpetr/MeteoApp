@@ -28,7 +28,6 @@ class MainActivity : ComponentActivity() {
                 permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
 
         if (locationGranted) {
-            // Разрешение на местоположение получено
             MapKitFactory.getInstance().onStart()
         }
     }
@@ -54,7 +53,6 @@ class MainActivity : ComponentActivity() {
             PackageManager.PERMISSION_GRANTED
         ) {
 
-            // Используем новый API для запроса разрешений
             locationPermissionRequest.launch(
                 arrayOf(
                     Manifest.permission.ACCESS_FINE_LOCATION,
@@ -73,6 +71,4 @@ class MainActivity : ComponentActivity() {
         MapKitFactory.getInstance().onStop()
         super.onStop()
     }
-
 }
-

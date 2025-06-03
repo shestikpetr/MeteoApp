@@ -18,13 +18,10 @@ import com.shestikpetr.meteo.ui.screens.ChartScreen
 import com.shestikpetr.meteo.ui.screens.MapScreen
 import com.shestikpetr.meteo.ui.login.LoginScreen
 import com.shestikpetr.meteo.ui.login.LoginViewModel
-import com.shestikpetr.meteo.ui.splash.SplashScreen
-
 
 sealed class Screen(val route: String) {
-    data object Splash : Screen("splash")
     data object Login : Screen("login")
-    data object Map : Screen("map") // Основной экран приложения
+    data object Map : Screen("map")
     data object Chart : Screen("chart")
 }
 
@@ -37,25 +34,17 @@ fun MeteoApp(
     val mapUiState by viewModel.mapUiState.collectAsState()
     val chartUiState by viewModel.chartUiState.collectAsState()
 
+    // Определяем стартовый экран на основе статуса авторизации
+    val startDestination = if (loginViewModel.checkLoggedIn()) {
+        Screen.Map.route
+    } else {
+        Screen.Login.route
+    }
+
     NavHost(
         navController = navController,
-        startDestination = Screen.Splash.route
+        startDestination = startDestination
     ) {
-        composable(Screen.Splash.route) {
-            SplashScreen {
-                // Проверяем, залогинен ли пользователь
-                if (loginViewModel.checkLoggedIn()) {
-                    navController.navigate(Screen.Map.route) {
-                        popUpTo(Screen.Splash.route) { inclusive = true }
-                    }
-                } else {
-                    navController.navigate(Screen.Login.route) {
-                        popUpTo(Screen.Splash.route) { inclusive = true }
-                    }
-                }
-            }
-        }
-
         composable(Screen.Login.route) {
             LoginScreen(
                 onLoginSuccess = {
@@ -104,7 +93,7 @@ fun MeteoApp(
                         launchSingleTop = true
                     }
                 },
-                viewModel = viewModel // Передаем ViewModel
+                viewModel = viewModel
             )
         }
 
