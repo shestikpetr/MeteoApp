@@ -16,6 +16,10 @@ interface MeteoApiService {
     @POST("auth/login")
     suspend fun login(@Body credentials: UserCredentials): Response<LoginResponse>
 
+    // Регистрация пользователя
+    @POST("auth/register")
+    suspend fun register(@Body registrationData: UserRegistrationData): Response<RegisterResponse>
+
     // Получение данных сенсора за период
     @GET("sensors/{complexId}/{parameter}")
     suspend fun getSensorData(
@@ -67,11 +71,26 @@ data class UserCredentials(
     val password: String
 )
 
+// Данные для регистрации
+data class UserRegistrationData(
+    val username: String,
+    val password: String,
+    val email: String
+)
+
 // Ответ на авторизацию
 data class LoginResponse(
     val success: Boolean,
     val token: String?,
     val error: String?
+)
+
+// Ответ на регистрацию
+data class RegisterResponse(
+    val success: Boolean,
+    val token: String?,
+    val error: String?,
+    val message: String?
 )
 
 // Точка данных с сенсора

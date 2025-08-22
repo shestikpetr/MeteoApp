@@ -39,6 +39,26 @@ class LoginViewModel @Inject constructor(
         }
     }
 
+    // Функция для регистрации пользователя
+    fun register(username: String, password: String, email: String) {
+        viewModelScope.launch {
+            try {
+                // Отображаем процесс загрузки
+                _loginState.value = null
+
+                val result = authRepository.register(username, password, email)
+                _loginState.value = result
+
+                if (result is LoginResult.Success) {
+                    Log.d("LoginViewModel", "Регистрация успешна")
+                }
+            } catch (e: Exception) {
+                Log.e("LoginViewModel", "Ошибка регистрации: ${e.message}", e)
+                _loginState.value = LoginResult.Error(e.message ?: "Ошибка регистрации")
+            }
+        }
+    }
+
     // Проверка, вошел ли пользователь в систему
     fun checkLoggedIn(): Boolean {
         return authRepository.isLoggedIn()

@@ -19,6 +19,7 @@ yandexMapkitKmp = "0.1.1"
 yandexMapkitKmpCompose = "0.1.1"
 ychartsVersion = "2.1.0"
 okhttp = "4.12.0"
+animationCoreLint = "1.8.2"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -48,6 +49,7 @@ hilt-navigation = { module = "androidx.hilt:hilt-navigation-compose", version.re
 yandex-mapkit-kmp = { module = "ru.sulgik.mapkit:yandex-mapkit-kmp", version.ref = "yandexMapkitKmp" }
 yandex-mapkit-kmp-compose = { module = "ru.sulgik.mapkit:yandex-mapkit-kmp-compose", version.ref = "yandexMapkitKmpCompose" }
 yml-ycharts = { module = "co.yml:ycharts", version.ref = "ychartsVersion" }
+androidx-animation-core-lint = { group = "androidx.compose.animation", name = "animation-core-lint", version.ref = "animationCoreLint" }
 
 
 [plugins]

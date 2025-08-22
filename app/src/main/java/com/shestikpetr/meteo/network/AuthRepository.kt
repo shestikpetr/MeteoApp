@@ -7,6 +7,7 @@ import javax.inject.Singleton
 // Интерфейс репозитория аутентификации
 interface AuthRepository {
     suspend fun login(username: String, password: String): LoginResult
+    suspend fun register(username: String, password: String, email: String): LoginResult
     fun logout()
     fun isLoggedIn(): Boolean
 }
@@ -49,6 +50,38 @@ class NetworkAuthRepository @Inject constructor(
             }
         } catch (e: Exception) {
             Log.e("AuthRepository", "Ошибка входа", e)
+            return LoginResult.Error(e.message ?: "Неизвестная ошибка")
+        }
+    }
+
+    override suspend fun register(username: String, password: String, email: String): LoginResult {
+        try {
+            Log.d("AuthRepository", "Попытка регистрации для пользователя: $username")
+            val registrationData = UserRegistrationData(username, password, email)
+            val response = meteoApiService.register(registrationData)
+
+            if (response.isSuccessful) {
+                val registerResponse = response.body()
+                if (registerResponse?.success == true) {
+                    Log.d("AuthRepository", "Успешная регистрация")
+                    // После успешной регистрации сразу авторизуем пользователя
+                    authManager.saveCredentials(username, password)
+                    return LoginResult.Success(registerResponse.token ?: "")
+                } else {
+                    Log.e("AuthRepository", "Ошибка регистрации: ${registerResponse?.error}")
+                    return LoginResult.Error(registerResponse?.error ?: "Ошибка регистрации")
+                }
+            } else {
+                Log.e(
+                    "AuthRepository",
+                    "Ошибка сервера при регистрации: ${response.code()}, ${
+                        response.errorBody()?.string()
+                    }"
+                )
+                return LoginResult.Error("Ошибка сервера: ${response.code()}")
+            }
+        } catch (e: Exception) {
+            Log.e("AuthRepository", "Ошибка регистрации", e)
             return LoginResult.Error(e.message ?: "Неизвестная ошибка")
         }
     }

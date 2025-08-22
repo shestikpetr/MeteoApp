@@ -193,8 +193,7 @@ fun ChartScreen(
                         // Дополнительная информация о данных
                         if (sensorData.isNotEmpty()) {
                             DataSummary(
-                                sensorData = sensorData,
-                                parameterType = selectedChartParameter
+                                sensorData = sensorData
                             )
                         }
                     }
@@ -265,22 +264,12 @@ fun DateRangePickerSection(
 
 @Composable
 fun DataSummary(
-    sensorData: List<SensorDataPoint>,
-    parameterType: Parameters
+    sensorData: List<SensorDataPoint>
 ) {
-    val min = sensorData.minOf { it.value }
-    val max = sensorData.maxOf { it.value }
-    val avg = sensorData.map { it.value }.average()
 
-    val dateFormatter = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault())
+    val dateFormatter = SimpleDateFormat("dd.MM.yyyy''HH:mm", Locale.getDefault())
     val startDate = sensorData.minByOrNull { it.time }?.time?.let { Date(it * 1000) }
     val endDate = sensorData.maxByOrNull { it.time }?.time?.let { Date(it * 1000) }
-
-    val unitText = when (parameterType) {
-        Parameters.TEMPERATURE -> "°C"
-        Parameters.HUMIDITY -> "%"
-        Parameters.PRESSURE -> "гПа"
-    }
 
     Card(
         modifier = Modifier
@@ -299,16 +288,6 @@ fun DataSummary(
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold
             )
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text("Минимум: ${String.format(Locale.getDefault(), "%.1f", min)} $unitText")
-                Text("Максимум: ${String.format(Locale.getDefault(), "%.1f", max)} $unitText")
-            }
-
-            Text("Среднее: ${String.format(Locale.getDefault(), "%.1f", avg)} $unitText")
 
             if (startDate != null && endDate != null) {
                 Text(

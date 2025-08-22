@@ -59,6 +59,9 @@ dependencies {
     // Retrofit
     implementation(libs.retrofit.android)
     implementation(libs.retrofit.android.converter)
+    implementation(libs.androidx.animation.core.lint)
+    implementation(libs.androidx.espresso.core)
+    implementation(libs.androidx.espresso.core)
 
     // Hilt
     kapt(libs.hilt.android.compiler)

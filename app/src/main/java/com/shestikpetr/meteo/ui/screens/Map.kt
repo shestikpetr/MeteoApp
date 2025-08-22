@@ -834,30 +834,19 @@ private fun ClusterMarker(
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             // Основной текст со значением
             Text(
-                text = if (cluster.averageValue > 0.001) { // Показываем даже отрицательные малые значения
+                text = if (cluster.averageValue > 0.001) {
                     String.format(Locale.getDefault(), "%.1f", cluster.averageValue) +
                             " ${cluster.parameter.getUnit()}"
                 } else if (cluster.averageValue < -0.001) {
                     String.format(Locale.getDefault(), "%.1f", cluster.averageValue) +
                             " ${cluster.parameter.getUnit()}"
                 } else {
-                    "0.0" // Показываем прочерк только для точного 0.0
+                    "0.0"
                 },
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color.Black
             )
-
-            /*
-            // Индикатор кешированных данных
-            if (isCachedData && cluster.averageValue != 0.0) {
-                Text(
-                    text = "💾", // Эмодзи дискеты для кешированных данных
-                    fontSize = 8.sp,
-                    modifier = Modifier.padding(top = 1.dp)
-                )
-            }
-            */
 
             // Счетчик станций для кластеров
             if (cluster.stations.size > 1) {

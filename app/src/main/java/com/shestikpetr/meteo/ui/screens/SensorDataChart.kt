@@ -79,20 +79,34 @@ fun SensorDataChart(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 val currentValue = sensorData.lastOrNull()?.value ?: 0.0
+                val min = sensorData.minOf { it.value }
+                val max = sensorData.maxOf { it.value }
                 val avgValue = if (sensorData.isNotEmpty()) {
                     sensorData.map { it.value }.average()
                 } else 0.0
 
                 ValueIndicator(
-                    label = "Текущее",
+                    label = "Последнее",
                     value = String.format(Locale.getDefault(), "%.1f", currentValue),
+                    color = lineColor
+                )
+
+                ValueIndicator(
+                    label = "Минимум",
+                    value = String.format(Locale.getDefault(), "%.1f", min),
+                    color = lineColor
+                )
+
+                ValueIndicator(
+                    label = "Максимум",
+                    value = String.format(Locale.getDefault(), "%.1f", max),
                     color = lineColor
                 )
 
                 ValueIndicator(
                     label = "Среднее",
                     value = String.format(Locale.getDefault(), "%.1f", avgValue),
-                    color = Color(0xFF34A853) // Google Green
+                    color = lineColor
                 )
             }
 
@@ -105,7 +119,7 @@ fun SensorDataChart(
                         val index = i * stepSize
                         if (index < sensorData.size) {
                             val date = Date(sensorData[index].time * 1000)
-                            SimpleDateFormat("dd.MM\nHH:mm", Locale.getDefault()).format(date)
+                            SimpleDateFormat("dd.MM''HH:mm", Locale.getDefault()).format(date)
                         } else ""
                     }
                     .labelAndAxisLinePadding(15.dp)
@@ -171,7 +185,7 @@ fun SensorDataChart(
                                             (x * stepSize).toInt().coerceIn(0, sensorData.size - 1)
                                         val date = Date(sensorData[index].time * 1000)
                                         val timeStr = SimpleDateFormat(
-                                            "dd.MM HH:mm",
+                                            "dd.MM''HH:mm",
                                             Locale.getDefault()
                                         ).format(date)
                                         "$timeStr\nЗначение: ${
@@ -220,7 +234,7 @@ private fun ValueIndicator(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
             .background(color.copy(alpha = 0.1f), RoundedCornerShape(8.dp))
-            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .padding(horizontal = 8.dp, vertical = 4.dp)
     ) {
         Text(
             text = label,
