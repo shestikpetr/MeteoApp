@@ -1,62 +1,156 @@
 package com.shestikpetr.meteo.network
 
-import android.content.Context
-import android.content.SharedPreferences
-import android.util.Base64
 import android.util.Log
-import dagger.hilt.android.qualifiers.ApplicationContext
+import com.shestikpetr.meteo.storage.impl.SharedPreferencesStorage
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import javax.inject.Inject
 import javax.inject.Singleton
-import androidx.core.content.edit
 
+/**
+ * AuthManager for API v1 with JWT tokens and refresh token support
+ */
 @Singleton
 class AuthManager @Inject constructor(
-    @ApplicationContext private val context: Context
+    private val storage: SharedPreferencesStorage,
+    private val apiService: MeteoApiService
 ) {
-    private val prefs: SharedPreferences by lazy {
-        context.getSharedPreferences("MeteoPrefs", Context.MODE_PRIVATE)
-    }
+    private val mutex = Mutex()
 
     companion object {
+        private const val KEY_ACCESS_TOKEN = "access_token"
+        private const val KEY_REFRESH_TOKEN = "refresh_token"
+        private const val KEY_USER_ID = "user_id"
         private const val KEY_USERNAME = "username"
-        private const val KEY_PASSWORD = "password"
+        private const val KEY_EMAIL = "email"
+        private const val TAG = "AuthManager"
     }
 
-    // Сохранение учетных данных
-    fun saveCredentials(username: String, password: String) {
-        prefs.edit {
-            putString(KEY_USERNAME, username)
-                .putString(KEY_PASSWORD, password)
+    /**
+     * Save authentication tokens after successful login/register
+     */
+    suspend fun saveAuthTokens(authTokens: AuthTokens) {
+        mutex.withLock {
+            storage.putString(KEY_ACCESS_TOKEN, authTokens.access_token)
+            storage.putString(KEY_REFRESH_TOKEN, authTokens.refresh_token)
+            storage.putString(KEY_USER_ID, authTokens.user_id.toString())
+            Log.d(TAG, "Tokens saved for user ID: ${authTokens.user_id}")
         }
     }
 
-    // Получение токена авторизации в формате Base64
-    fun getAuthToken(): String {
-        val username = prefs.getString(KEY_USERNAME, "") ?: ""
-        val password = prefs.getString(KEY_PASSWORD, "") ?: ""
-
-        val credentials = "$username:$password"
-        return Base64.encodeToString(credentials.toByteArray(), Base64.NO_WRAP)
+    /**
+     * Save user information from /auth/me or login response
+     */
+    suspend fun saveUserInfo(username: String, email: String) {
+        storage.putString(KEY_USERNAME, username)
+        storage.putString(KEY_EMAIL, email)
     }
 
-    fun getAuthTokenDebug(): String {
-        val token = getAuthToken()
-        Log.d("AuthManager", "Текущий токен: ${token.take(10)}...")
-        return token
+    /**
+     * Get current access token for API requests
+     */
+    suspend fun getAccessToken(): String? {
+        return storage.getString(KEY_ACCESS_TOKEN)
     }
 
-    // Проверка наличия сохраненных учетных данных
-    fun hasCredentials(): Boolean {
-        val username = prefs.getString(KEY_USERNAME, "")
-        val password = prefs.getString(KEY_PASSWORD, "")
-        return !username.isNullOrEmpty() && !password.isNullOrEmpty()
+    /**
+     * Get current refresh token
+     */
+    private suspend fun getRefreshToken(): String? {
+        return storage.getString(KEY_REFRESH_TOKEN)
     }
 
-    // Очистка учетных данных
-    fun clearCredentials() {
-        prefs.edit {
-            remove(KEY_USERNAME)
-                .remove(KEY_PASSWORD)
+    /**
+     * Get authorization header for API requests with automatic token refresh
+     */
+    suspend fun getAuthorizationHeader(): String? {
+        mutex.withLock {
+            var accessToken = getAccessToken()
+
+            // If no access token, we're not logged in
+            if (accessToken == null) {
+                Log.d(TAG, "No access token found")
+                return null
+            }
+
+            // Try to refresh token if we have a refresh token
+            // In a real implementation, you'd check if the token is expired first
+            val refreshToken = getRefreshToken()
+            if (refreshToken != null) {
+                try {
+                    val response = apiService.refreshToken("Bearer $refreshToken")
+                    if (response.isSuccessful && response.body()?.success == true) {
+                        val newAccessToken = response.body()?.access_token
+                        if (newAccessToken != null) {
+                            storage.putString(KEY_ACCESS_TOKEN, newAccessToken)
+                            accessToken = newAccessToken
+                            Log.d(TAG, "Access token refreshed successfully")
+                        }
+                    } else {
+                        Log.w(TAG, "Failed to refresh token: ${response.code()}")
+                        // If refresh fails, user needs to login again
+                        clearAuthData()
+                        return null
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error refreshing token", e)
+                    // On network error, use existing token
+                }
+            }
+
+            return accessToken?.let { "Bearer $it" }
         }
+    }
+
+    /**
+     * Check if user is currently logged in
+     */
+    suspend fun isLoggedIn(): Boolean {
+        return getAccessToken() != null && getRefreshToken() != null
+    }
+
+    /**
+     * Get current user information
+     */
+    suspend fun getCurrentUser(): Triple<Int?, String?, String?> {
+        val userId = storage.getString(KEY_USER_ID)?.toIntOrNull()
+        val username = storage.getString(KEY_USERNAME)
+        val email = storage.getString(KEY_EMAIL)
+        return Triple(userId, username, email)
+    }
+
+    /**
+     * Logout and clear all authentication data
+     */
+    suspend fun logout() {
+        mutex.withLock {
+            clearAuthData()
+            Log.d(TAG, "User logged out, all auth data cleared")
+        }
+    }
+
+    /**
+     * Clear all authentication related data
+     */
+    private suspend fun clearAuthData() {
+        storage.remove(KEY_ACCESS_TOKEN)
+        storage.remove(KEY_REFRESH_TOKEN)
+        storage.remove(KEY_USER_ID)
+        storage.remove(KEY_USERNAME)
+        storage.remove(KEY_EMAIL)
+    }
+
+    /**
+     * Get auth token for debugging (first 10 chars)
+     */
+    suspend fun getAuthTokenDebug(): String {
+        val token = getAccessToken()
+        val preview = if (token != null && token.length > 10) {
+            "${token.take(10)}..."
+        } else {
+            "No token"
+        }
+        Log.d(TAG, "Current token: $preview")
+        return preview
     }
 }

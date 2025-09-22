@@ -40,7 +40,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.shestikpetr.meteo.network.SensorDataPoint
-import com.shestikpetr.meteo.ui.MeteoViewModel
+import com.shestikpetr.meteo.ui.chart.ChartViewModel
 import com.shestikpetr.meteo.ui.Parameters
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -49,7 +49,7 @@ import java.util.Locale
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChartScreen(
-    viewModel: MeteoViewModel,
+    chartViewModel: ChartViewModel,
     selectedChartParameter: Parameters,
     selectedDateRange: Pair<Long?, Long?>,
     onChangeChartParameter: (Parameters) -> Unit,
@@ -60,7 +60,7 @@ fun ChartScreen(
 ) {
     var isChartVisible by remember { mutableStateOf(false) }
     val scrollState = rememberScrollState()
-    val isDataLoading = viewModel.chartUiState.collectAsState().value.isLoadingSensorData
+    val isDataLoading = chartViewModel.uiState.collectAsState().value.isLoadingSensorData
 
     // Автоматически загружать данные, когда выбран диапазон дат и параметр
     LaunchedEffect(selectedDateRange, selectedChartParameter) {

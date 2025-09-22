@@ -1,118 +1,264 @@
 package com.shestikpetr.meteo.network
 
 import retrofit2.Response
-import retrofit2.http.GET
-import retrofit2.http.Path
-import retrofit2.http.Query
-import retrofit2.http.POST
-import retrofit2.http.Body
-import retrofit2.http.Header
+import retrofit2.http.*
 
-data class ValueResponse(val value: Double)
+/**
+ * Generic API response wrapper for all API v1 endpoints
+ */
+data class ApiResponse<T>(
+    val success: Boolean,
+    val data: T?
+)
 
-// Интерфейс для запросов
+/**
+ * API error response format
+ */
+data class ApiError(
+    val error: String
+)
+
+/**
+ * MeteoApp API v1 Service Interface
+ * Base URL: http://84.237.1.131:8085/api/v1/
+ */
 interface MeteoApiService {
-    // Авторизация пользователя
+
+    // ===================== AUTH ENDPOINTS =====================
+
+    /**
+     * User login
+     */
     @POST("auth/login")
-    suspend fun login(@Body credentials: UserCredentials): Response<LoginResponse>
+    suspend fun login(@Body credentials: UserCredentials): Response<ApiResponse<AuthTokens>>
 
-    // Регистрация пользователя
+    /**
+     * User registration
+     */
     @POST("auth/register")
-    suspend fun register(@Body registrationData: UserRegistrationData): Response<RegisterResponse>
+    suspend fun register(@Body registrationData: UserRegistrationData): Response<ApiResponse<AuthTokens>>
 
-    // Получение данных сенсора за период
-    @GET("sensors/{complexId}/{parameter}")
-    suspend fun getSensorData(
-        @Path("complexId") complexId: String,       // Айди комплекса
-        @Path("parameter") parameter: String,      // Параметр
-        @Query("startTime") startTime: Long?,       // Время начала интервала
-        @Query("endTime") endTime: Long?,          // Время окончания интервала
-        @Header("Authorization") authToken: String  // Токен авторизации
-    ): List<SensorDataPoint>
+    /**
+     * Refresh access token using refresh token
+     */
+    @POST("auth/refresh")
+    suspend fun refreshToken(@Header("Authorization") refreshToken: String): Response<RefreshTokenResponse>
 
-    // Запрос для получения последней записи выбранного параметра
-    @GET("sensors/{complexId}/{parameter}/latest")
-    suspend fun getLatestSensorData(
-        @Path("complexId") complexId: String,       // Айди комплекса
-        @Path("parameter") parameter: String,       // Параметр
-        @Header("Authorization") authToken: String  // Токен авторизации
-    ): ValueResponse
+    /**
+     * Get current user information
+     */
+    @GET("auth/me")
+    suspend fun getCurrentUser(@Header("Authorization") authToken: String): Response<ApiResponse<UserInfo>>
 
-    // Получение списка доступных параметров для станции
-    @GET("sensors/{complexId}/parameters")
-    suspend fun getStationParameters(
-        @Path("complexId") complexId: String,       // Айди комплекса
-        @Header("Authorization") authToken: String  // Токен авторизации
-    ): List<ParameterInfo>
 
-    // Получение списка доступных станций пользователя
+    // ===================== STATION ENDPOINTS =====================
+
+    /**
+     * Get all user stations
+     */
     @GET("stations")
-    suspend fun getUserStations(
-        @Header("Authorization") authToken: String  // Токен авторизации
-    ): List<StationInfo>
+    suspend fun getUserStations(@Header("Authorization") authToken: String): Response<ApiResponse<List<StationInfo>>>
 
-    // Получение метаданных о параметрах
-    @GET("parameters")
-    suspend fun getParametersMetadata(
-        @Header("Authorization") authToken: String  // Токен авторизации
-    ): Map<String, ParameterMetadata>
+    /**
+     * Add station to user
+     */
+    @POST("stations")
+    suspend fun addStation(
+        @Header("Authorization") authToken: String,
+        @Body stationData: AddStationRequest
+    ): Response<ApiResponse<AddStationResponse>>
 
-    // Получение информации о конкретном параметре
-    @GET("parameters/{parameterId}")
-    suspend fun getParameterMetadata(
-        @Path("parameterId") parameterId: String,   // Идентификатор параметра
-        @Header("Authorization") authToken: String  // Токен авторизации
-    ): ParameterMetadata
+    /**
+     * Update station settings
+     */
+    @PUT("stations/{station_number}")
+    suspend fun updateStation(
+        @Path("station_number") stationNumber: String,
+        @Header("Authorization") authToken: String,
+        @Body updateData: UpdateStationRequest
+    ): Response<ApiResponse<Unit>>
+
+    /**
+     * Remove station from user
+     */
+    @DELETE("stations/{station_number}")
+    suspend fun removeStation(
+        @Path("station_number") stationNumber: String,
+        @Header("Authorization") authToken: String
+    ): Response<ApiResponse<Unit>>
+
+    /**
+     * Get station parameters
+     */
+    @GET("stations/{station_number}/parameters")
+    suspend fun getStationParameters(
+        @Path("station_number") stationNumber: String,
+        @Header("Authorization") authToken: String
+    ): Response<ApiResponse<List<ParameterInfo>>>
+
+    // ===================== SENSOR DATA ENDPOINTS =====================
+
+    /**
+     * Get sensor data time series
+     */
+    @GET("sensors/{station_number}/{parameter}")
+    suspend fun getSensorData(
+        @Path("station_number") stationNumber: String,
+        @Path("parameter") parameter: String,
+        @Query("start_time") startTime: Long?,
+        @Query("end_time") endTime: Long?,
+        @Query("limit") limit: Int?,
+        @Header("Authorization") authToken: String
+    ): Response<ApiResponse<List<SensorDataPoint>>>
+
+    /**
+     * Get latest value for specific parameter
+     */
+    @GET("sensors/{station_number}/{parameter}/latest")
+    suspend fun getLatestSensorData(
+        @Path("station_number") stationNumber: String,
+        @Path("parameter") parameter: String,
+        @Header("Authorization") authToken: String
+    ): Response<ApiResponse<SensorDataPoint>>
+
+
+    /**
+     * Get latest values for all parameters of a station
+     */
+    @GET("sensors/{station_number}/latest")
+    suspend fun getLatestStationData(
+        @Path("station_number") stationNumber: String,
+        @Header("Authorization") authToken: String
+    ): Response<ApiResponse<List<SensorDataPoint>>>
+
+    /**
+     * Get latest data from all user stations
+     */
+    @GET("sensors/latest")
+    suspend fun getAllStationsLatestData(
+        @Header("Authorization") authToken: String
+    ): Response<ApiResponse<Map<String, List<SensorDataPoint>>>>
 }
 
-// Данные для авторизации
+// ===================== AUTH DATA MODELS =====================
+
+/**
+ * User login credentials
+ */
 data class UserCredentials(
     val username: String,
     val password: String
 )
 
-// Данные для регистрации
+/**
+ * User registration data
+ */
 data class UserRegistrationData(
     val username: String,
-    val password: String,
-    val email: String
+    val email: String,
+    val password: String
 )
 
-// Ответ на авторизацию
-data class LoginResponse(
+/**
+ * Authentication tokens response
+ */
+data class AuthTokens(
+    val user_id: Int,
+    val access_token: String,
+    val refresh_token: String
+)
+
+/**
+ * Refresh token response (only returns new access token)
+ */
+data class RefreshTokenResponse(
     val success: Boolean,
-    val token: String?,
-    val error: String?
+    val access_token: String?
 )
 
-// Ответ на регистрацию
-data class RegisterResponse(
-    val success: Boolean,
-    val token: String?,
-    val error: String?,
-    val message: String?
+/**
+ * Current user information
+ */
+data class UserInfo(
+    val id: Int,
+    val username: String,
+    val email: String,
+    val role: String,
+    val is_active: Boolean
 )
 
-// Точка данных с сенсора
-data class SensorDataPoint(
-    val time: Long,   // Время
-    val value: Double // Значение
-)
+// ===================== STATION DATA MODELS =====================
 
-// Информация о параметре станции
-data class ParameterInfo(
-    val id: String,
-    val name: String
-)
-
-// Информация о метеостанции
+/**
+ * Station information from API v1
+ */
 data class StationInfo(
-    val stationNumber: String?,
-    val name: String?,
-    val location: String?
+    val id: Int,
+    val station_number: String,     // 8-digit station number
+    val name: String,               // System name
+    val custom_name: String?,       // User custom name
+    val display_name: String,       // Display name (custom_name or name)
+    val location: String,
+    val latitude: Double,           // Exact coordinates
+    val longitude: Double,
+    val altitude: Double?,
+    val is_favorite: Boolean,       // User favorite flag
+    val is_active: Boolean,         // Station active status
+    val parameters: List<String>    // Available parameter codes
 )
 
-// Метаданные параметра
+/**
+ * Request to add station to user
+ */
+data class AddStationRequest(
+    val station_number: String,    // 8-digit station number
+    val custom_name: String?       // Optional custom name
+)
+
+/**
+ * Response when adding station
+ */
+data class AddStationResponse(
+    val user_station_id: Int,
+    val station_number: String,
+    val name: String,
+    val parameters: List<String>
+)
+
+/**
+ * Request to update station settings
+ */
+data class UpdateStationRequest(
+    val custom_name: String?,      // Update custom name
+    val is_favorite: Boolean?      // Update favorite status
+)
+
+// ===================== SENSOR DATA MODELS =====================
+
+/**
+ * Sensor data point from API v1
+ */
+data class SensorDataPoint(
+    val time: Long,                 // Unix timestamp
+    val value: Double,              // Sensor value
+    val parameter: String,          // Parameter code (T, H, P, etc.)
+    val station: String             // Station number
+)
+
+/**
+ * Parameter information with detailed metadata
+ */
+data class ParameterInfo(
+    val code: String,               // Parameter code (T, H, P)
+    val name: String,               // Display name
+    val unit: String,               // Measurement unit
+    val description: String,        // Full description
+    val category: String            // Parameter category
+)
+
+/**
+ * Legacy parameter metadata (for compatibility)
+ */
 data class ParameterMetadata(
     val name: String,
     val unit: String,

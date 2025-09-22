@@ -73,7 +73,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.shestikpetr.meteo.data.StationWithLocation
-import com.shestikpetr.meteo.ui.MeteoViewModel
+import com.shestikpetr.meteo.ui.map.MapViewModel
 import com.shestikpetr.meteo.ui.Parameters
 import com.shestikpetr.meteo.ui.navigation.Screen
 import kotlinx.coroutines.launch
@@ -101,7 +101,7 @@ fun MapScreen(
     navController: NavController,
     onRefreshStations: () -> Unit,
     onLogout: () -> Unit,
-    viewModel: MeteoViewModel
+    mapViewModel: MapViewModel
 ) {
     // State for error messages
     var errorMessage by remember { mutableStateOf<String?>(null) }
@@ -195,7 +195,7 @@ fun MapScreen(
                 modifier = Modifier.fillMaxSize()
             ) {
                 // Получаем список станций с кешированными данными для текущего параметра
-                val cachedStations = viewModel.getCachedStationsForParameter(selectedParameter)
+                val cachedStations = mapViewModel.getCachedStationsForParameter(selectedParameter)
 
                 Log.d("MapScreen", "Кешированные станции для $selectedParameter: $cachedStations")
 

@@ -4,18 +4,20 @@ import android.util.Log
 import javax.inject.Inject
 import javax.inject.Singleton
 
-// Интерфейс репозитория аутентификации
+// Интерфейс репозитория аутентификации для API v1
 interface AuthRepository {
     suspend fun login(username: String, password: String): LoginResult
     suspend fun register(username: String, password: String, email: String): LoginResult
-    fun logout()
-    fun isLoggedIn(): Boolean
+    suspend fun logout()
+    suspend fun isLoggedIn(): Boolean
+    suspend fun getCurrentUser(): UserInfo?
 }
 
-// Результат аутентификации
+// Результат аутентификации для API v1
 sealed class LoginResult {
-    data class Success(val token: String) : LoginResult()
+    data class Success(val accessToken: String, val refreshToken: String, val userId: Int) : LoginResult()
     data class Error(val message: String) : LoginResult()
+    object Loading : LoginResult()
 }
 
 // Реализация репозитория аутентификации
@@ -32,20 +34,27 @@ class NetworkAuthRepository @Inject constructor(
             val response = meteoApiService.login(credentials)
 
             if (response.isSuccessful) {
-                val loginResponse = response.body()
-                if (loginResponse?.success == true) {
-                    Log.d("AuthRepository", "Успешный вход в систему")
-                    authManager.saveCredentials(username, password)
-                    return LoginResult.Success(loginResponse.token ?: "")
+                val apiResponse = response.body()
+                if (apiResponse?.success == true && apiResponse.data != null) {
+                    val authTokens = apiResponse.data
+                    Log.d("AuthRepository", "Успешный вход в систему для user_id: ${authTokens.user_id}")
+
+                    // Сохраняем токены
+                    authManager.saveAuthTokens(authTokens)
+                    authManager.saveUserInfo(username, "")
+
+                    return LoginResult.Success(
+                        accessToken = authTokens.access_token,
+                        refreshToken = authTokens.refresh_token,
+                        userId = authTokens.user_id
+                    )
                 } else {
-                    Log.e("AuthRepository", "Ошибка входа: ${loginResponse?.error}")
-                    return LoginResult.Error(loginResponse?.error ?: "Ошибка авторизации")
+                    Log.e("AuthRepository", "Ошибка входа: API returned success=false")
+                    return LoginResult.Error("Ошибка авторизации")
                 }
             } else {
-                Log.e(
-                    "AuthRepository",
-                    "Ошибка сервера: ${response.code()}, ${response.errorBody()?.string()}"
-                )
+                val errorBody = response.errorBody()?.string()
+                Log.e("AuthRepository", "Ошибка сервера: ${response.code()}, $errorBody")
                 return LoginResult.Error("Ошибка сервера: ${response.code()}")
             }
         } catch (e: Exception) {
@@ -57,27 +66,31 @@ class NetworkAuthRepository @Inject constructor(
     override suspend fun register(username: String, password: String, email: String): LoginResult {
         try {
             Log.d("AuthRepository", "Попытка регистрации для пользователя: $username")
-            val registrationData = UserRegistrationData(username, password, email)
+            val registrationData = UserRegistrationData(username, email, password)
             val response = meteoApiService.register(registrationData)
 
             if (response.isSuccessful) {
-                val registerResponse = response.body()
-                if (registerResponse?.success == true) {
-                    Log.d("AuthRepository", "Успешная регистрация")
-                    // После успешной регистрации сразу авторизуем пользователя
-                    authManager.saveCredentials(username, password)
-                    return LoginResult.Success(registerResponse.token ?: "")
+                val apiResponse = response.body()
+                if (apiResponse?.success == true && apiResponse.data != null) {
+                    val authTokens = apiResponse.data
+                    Log.d("AuthRepository", "Успешная регистрация для user_id: ${authTokens.user_id}")
+
+                    // Сохраняем токены и информацию о пользователе
+                    authManager.saveAuthTokens(authTokens)
+                    authManager.saveUserInfo(username, email)
+
+                    return LoginResult.Success(
+                        accessToken = authTokens.access_token,
+                        refreshToken = authTokens.refresh_token,
+                        userId = authTokens.user_id
+                    )
                 } else {
-                    Log.e("AuthRepository", "Ошибка регистрации: ${registerResponse?.error}")
-                    return LoginResult.Error(registerResponse?.error ?: "Ошибка регистрации")
+                    Log.e("AuthRepository", "Ошибка регистрации: API returned success=false")
+                    return LoginResult.Error("Ошибка регистрации")
                 }
             } else {
-                Log.e(
-                    "AuthRepository",
-                    "Ошибка сервера при регистрации: ${response.code()}, ${
-                        response.errorBody()?.string()
-                    }"
-                )
+                val errorBody = response.errorBody()?.string()
+                Log.e("AuthRepository", "Ошибка сервера при регистрации: ${response.code()}, $errorBody")
                 return LoginResult.Error("Ошибка сервера: ${response.code()}")
             }
         } catch (e: Exception) {
@@ -86,11 +99,30 @@ class NetworkAuthRepository @Inject constructor(
         }
     }
 
-    override fun logout() {
-        authManager.clearCredentials()
+    override suspend fun logout() {
+        authManager.logout()
     }
 
-    override fun isLoggedIn(): Boolean {
-        return authManager.hasCredentials()
+    override suspend fun isLoggedIn(): Boolean {
+        return authManager.isLoggedIn()
+    }
+
+    override suspend fun getCurrentUser(): UserInfo? {
+        return try {
+            val authHeader = authManager.getAuthorizationHeader()
+            if (authHeader != null) {
+                val response = meteoApiService.getCurrentUser(authHeader)
+                if (response.isSuccessful && response.body()?.success == true) {
+                    response.body()?.data
+                } else {
+                    null
+                }
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            Log.e("AuthRepository", "Failed to get current user", e)
+            null
+        }
     }
 }

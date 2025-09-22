@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.shestikpetr.meteo.network.AuthRepository
 import com.shestikpetr.meteo.network.LoginResult
+import com.shestikpetr.meteo.network.UserInfo
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -24,13 +25,13 @@ class LoginViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 // Отображаем процесс загрузки
-                _loginState.value = null
+                _loginState.value = LoginResult.Loading
 
                 val result = authRepository.login(username, password)
                 _loginState.value = result
 
                 if (result is LoginResult.Success) {
-                    Log.d("LoginViewModel", "Авторизация успешна")
+                    Log.d("LoginViewModel", "Авторизация успешна для user_id: ${result.userId}")
                 }
             } catch (e: Exception) {
                 Log.e("LoginViewModel", "Ошибка авторизации: ${e.message}", e)
@@ -44,13 +45,13 @@ class LoginViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 // Отображаем процесс загрузки
-                _loginState.value = null
+                _loginState.value = LoginResult.Loading
 
                 val result = authRepository.register(username, password, email)
                 _loginState.value = result
 
                 if (result is LoginResult.Success) {
-                    Log.d("LoginViewModel", "Регистрация успешна")
+                    Log.d("LoginViewModel", "Регистрация успешна для user_id: ${result.userId}")
                 }
             } catch (e: Exception) {
                 Log.e("LoginViewModel", "Ошибка регистрации: ${e.message}", e)
@@ -60,13 +61,26 @@ class LoginViewModel @Inject constructor(
     }
 
     // Проверка, вошел ли пользователь в систему
-    fun checkLoggedIn(): Boolean {
-        return authRepository.isLoggedIn()
+    fun checkLoggedIn(callback: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            val isLoggedIn = authRepository.isLoggedIn()
+            callback(isLoggedIn)
+        }
     }
 
     // Выход из системы
     fun logout() {
-        authRepository.logout()
-        _loginState.value = null
+        viewModelScope.launch {
+            authRepository.logout()
+            _loginState.value = null
+        }
+    }
+
+    // Получение информации о текущем пользователе
+    fun getCurrentUser(callback: (UserInfo?) -> Unit) {
+        viewModelScope.launch {
+            val user = authRepository.getCurrentUser()
+            callback(user)
+        }
     }
 }

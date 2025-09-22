@@ -2,6 +2,14 @@ package com.shestikpetr.meteo.network
 
 import android.content.Context
 import android.util.Log
+import com.shestikpetr.meteo.cache.SensorDataCache
+import com.shestikpetr.meteo.network.impl.OkHttpClientWrapper
+import com.shestikpetr.meteo.network.interfaces.HttpClient
+import com.shestikpetr.meteo.utils.LocationPermissionManager
+import com.shestikpetr.meteo.utils.MapKitLifecycleManager
+import com.shestikpetr.meteo.utils.RetryPolicy
+import com.shestikpetr.meteo.utils.StationDataTransformer
+import com.shestikpetr.meteo.storage.impl.SharedPreferencesStorage
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -106,7 +114,7 @@ object MeteoModule {
     @Singleton
     fun providesRetrofit(okHttpClient: OkHttpClient): Retrofit {
         return Retrofit.Builder()
-            .baseUrl("http://84.237.1.131:8085/api/")
+            .baseUrl("http://84.237.1.131:8085/api/v1/")
             .client(okHttpClient)
             .addConverterFactory(GsonConverterFactory.create())
             .build()
@@ -118,14 +126,6 @@ object MeteoModule {
         return retrofit.create(MeteoApiService::class.java)
     }
 
-    @Provides
-    @Singleton
-    fun providesMeteoRepository(
-        meteoApiService: MeteoApiService,
-        authManager: AuthManager
-    ): MeteoRepository {
-        return NetworkMeteoRepository(meteoApiService, authManager)
-    }
 
     @Provides
     @Singleton
@@ -138,7 +138,49 @@ object MeteoModule {
 
     @Provides
     @Singleton
-    fun providesAuthManager(@ApplicationContext context: Context): AuthManager {
-        return AuthManager(context)
+    fun providesAuthManager(
+        storage: SharedPreferencesStorage,
+        meteoApiService: MeteoApiService
+    ): AuthManager {
+        return AuthManager(storage, meteoApiService)
+    }
+
+    // Utility classes are already annotated with @Singleton and @Inject constructor,
+    // so Hilt will automatically provide them. These explicit providers are for clarity.
+
+    @Provides
+    @Singleton
+    fun providesSensorDataCache(): SensorDataCache {
+        return SensorDataCache()
+    }
+
+    @Provides
+    @Singleton
+    fun providesRetryPolicy(): RetryPolicy {
+        return RetryPolicy()
+    }
+
+    @Provides
+    @Singleton
+    fun providesStationDataTransformer(): StationDataTransformer {
+        return StationDataTransformer()
+    }
+
+    @Provides
+    @Singleton
+    fun providesLocationPermissionManager(): LocationPermissionManager {
+        return LocationPermissionManager()
+    }
+
+    @Provides
+    @Singleton
+    fun providesMapKitLifecycleManager(): MapKitLifecycleManager {
+        return MapKitLifecycleManager()
+    }
+
+    @Provides
+    @Singleton
+    fun providesHttpClient(): HttpClient {
+        return OkHttpClientWrapper()
     }
 }
