@@ -1,6 +1,5 @@
 package com.shestikpetr.meteo.ui.login
 
-import android.util.Log
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
@@ -25,13 +24,23 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.shestikpetr.meteo.network.LoginResult
+import com.shestikpetr.meteo.BuildConfig
+import com.shestikpetr.meteo.common.error.MeteoResult
+import com.shestikpetr.meteo.common.logging.MeteoLogger
+import com.shestikpetr.meteo.network.AuthTokens
 import com.shestikpetr.meteo.ui.components.MeteoLogo
 import com.shestikpetr.meteo.ui.components.MinimalTextField
 import com.shestikpetr.meteo.ui.components.MinimalButton
 import com.shestikpetr.meteo.ui.components.MinimalCard
+import com.shestikpetr.meteo.localization.compose.stringResource
+import com.shestikpetr.meteo.localization.interfaces.StringKey
+import com.shestikpetr.meteo.config.interfaces.DemoConfigRepository
 
+/**
+ * Authentication modes for the login screen.
+ */
 enum class AuthMode {
     LOGIN, REGISTER
 }
@@ -39,8 +48,14 @@ enum class AuthMode {
 @Composable
 fun LoginScreen(
     onLoginSuccess: () -> Unit,
-    viewModel: LoginViewModel = hiltViewModel()
+    viewModel: LoginViewModel = hiltViewModel(),
+    demoConfigViewModel: DemoConfigViewModel = hiltViewModel()
 ) {
+    val logger = MeteoLogger.forTag("LoginScreen")
+    // Get localized error messages
+    val loginErrorMessage = stringResource(StringKey.LoginErrorInvalidCredentials)
+    val registerErrorMessage = stringResource(StringKey.RegisterErrorUserExists)
+    val passwordMismatchMessage = stringResource(StringKey.PasswordMismatch)
     var authMode by remember { mutableStateOf(AuthMode.LOGIN) }
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
@@ -49,6 +64,19 @@ fun LoginScreen(
     var isLoading by remember { mutableStateOf(false) }
     var isDemoLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var demoCredentials by remember { mutableStateOf<DemoConfigRepository.DemoCredentials?>(null) }
+
+    // Load demo credentials
+    LaunchedEffect(Unit) {
+        try {
+            demoCredentials = demoConfigViewModel.demoConfigRepository.getDemoCredentials().getOrElse {
+                demoConfigViewModel.demoConfigRepository.getDefaultDemoCredentials()
+            }
+        } catch (e: Exception) {
+            logger.e("Failed to load demo credentials", e)
+            demoCredentials = demoConfigViewModel.demoConfigRepository.getDefaultDemoCredentials()
+        }
+    }
     var passwordVisible by remember { mutableStateOf(false) }
     var confirmPasswordVisible by remember { mutableStateOf(false) }
 
@@ -75,22 +103,22 @@ fun LoginScreen(
 
     LaunchedEffect(loginState.value) {
         when (loginState.value) {
-            is LoginResult.Success -> {
+            is MeteoResult.Success -> {
                 isLoading = false
                 isDemoLoading = false
                 onLoginSuccess()
             }
 
-            is LoginResult.Error -> {
+            is MeteoResult.Error -> {
                 isLoading = false
                 isDemoLoading = false
                 errorMessage = when (authMode) {
-                    AuthMode.LOGIN -> "Неверные учетные данные. Проверьте логин и пароль."
-                    AuthMode.REGISTER -> "Ошибка регистрации. Пользователь уже существует или данные некорректны."
+                    AuthMode.LOGIN -> loginErrorMessage
+                    AuthMode.REGISTER -> registerErrorMessage
                 }
             }
 
-            is LoginResult.Loading -> {
+            is MeteoResult.Loading -> {
                 errorMessage = null
             }
 
@@ -136,14 +164,14 @@ fun LoginScreen(
             Spacer(modifier = Modifier.height(24.dp))
 
             Text(
-                text = "Метео",
+                text = stringResource(StringKey.AppTitle),
                 style = MaterialTheme.typography.headlineLarge,
                 fontWeight = FontWeight.Light,
                 color = MaterialTheme.colorScheme.primary
             )
 
             Text(
-                text = "Метеорологическая система",
+                text = stringResource(StringKey.AppSubtitle),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
                 modifier = Modifier.padding(bottom = 48.dp)
@@ -172,7 +200,7 @@ fun LoginScreen(
                             horizontalArrangement = Arrangement.SpaceEvenly
                         ) {
                             ModeToggleButton(
-                                text = "Вход",
+                                text = stringResource(StringKey.LoginMode),
                                 isSelected = authMode == AuthMode.LOGIN,
                                 onClick = {
                                     authMode = AuthMode.LOGIN
@@ -184,7 +212,7 @@ fun LoginScreen(
                             )
 
                             ModeToggleButton(
-                                text = "Регистрация",
+                                text = stringResource(StringKey.RegisterMode),
                                 isSelected = authMode == AuthMode.REGISTER,
                                 onClick = {
                                     authMode = AuthMode.REGISTER
@@ -214,7 +242,7 @@ fun LoginScreen(
                             MinimalTextField(
                                 value = email,
                                 onValueChange = { email = it },
-                                label = "Email",
+                                label = stringResource(StringKey.Email),
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -226,7 +254,7 @@ fun LoginScreen(
                         MinimalTextField(
                             value = username,
                             onValueChange = { username = it },
-                            label = "Имя пользователя",
+                            label = stringResource(StringKey.Username),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(bottom = 20.dp)
@@ -236,7 +264,7 @@ fun LoginScreen(
                         MinimalTextField(
                             value = password,
                             onValueChange = { password = it },
-                            label = "Пароль",
+                            label = stringResource(StringKey.Password),
                             visualTransformation = if (passwordVisible)
                                 VisualTransformation.None
                             else
@@ -246,7 +274,7 @@ fun LoginScreen(
                                 IconButton(onClick = { passwordVisible = !passwordVisible }) {
                                     Icon(
                                         imageVector = Icons.Default.Lock,
-                                        contentDescription = if (passwordVisible) "Скрыть пароль" else "Показать пароль",
+                                        contentDescription = if (passwordVisible) stringResource(StringKey.HidePassword) else stringResource(StringKey.ShowPassword),
                                         tint = MaterialTheme.colorScheme.primary.copy(alpha = if (passwordVisible) 1f else 0.5f)
                                     )
                                 }
@@ -261,7 +289,7 @@ fun LoginScreen(
                             MinimalTextField(
                                 value = confirmPassword,
                                 onValueChange = { confirmPassword = it },
-                                label = "Подтвердите пароль",
+                                label = stringResource(StringKey.ConfirmPassword),
                                 visualTransformation = if (confirmPasswordVisible)
                                     VisualTransformation.None
                                 else
@@ -274,7 +302,7 @@ fun LoginScreen(
                                     }) {
                                         Icon(
                                             imageVector = Icons.Default.Lock,
-                                            contentDescription = if (confirmPasswordVisible) "Скрыть пароль" else "Показать пароль",
+                                            contentDescription = if (confirmPasswordVisible) stringResource(StringKey.HidePassword) else stringResource(StringKey.ShowPassword),
                                             tint = if (confirmPassword.isNotEmpty() && password != confirmPassword)
                                                 MaterialTheme.colorScheme.error
                                             else
@@ -285,7 +313,7 @@ fun LoginScreen(
                                 supportingText = if (confirmPassword.isNotEmpty() && password != confirmPassword) {
                                     {
                                         Text(
-                                            text = "Пароли не совпадают",
+                                            text = passwordMismatchMessage,
                                             color = MaterialTheme.colorScheme.error,
                                             style = MaterialTheme.typography.bodySmall
                                         )
@@ -313,7 +341,7 @@ fun LoginScreen(
                                             viewModel.register(username, password, email)
                                         } else {
                                             isLoading = false
-                                            errorMessage = "Пароли не совпадают"
+                                            errorMessage = passwordMismatchMessage
                                         }
                                     }
                                 }
@@ -333,8 +361,8 @@ fun LoginScreen(
                         ) {
                             Text(
                                 text = when (mode) {
-                                    AuthMode.LOGIN -> "Войти"
-                                    AuthMode.REGISTER -> "Зарегистрироваться"
+                                    AuthMode.LOGIN -> stringResource(StringKey.LoginButton)
+                                    AuthMode.REGISTER -> stringResource(StringKey.RegisterButton)
                                 },
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Medium
@@ -358,14 +386,14 @@ fun LoginScreen(
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
-                        text = "Демо режим",
+                        text = stringResource(StringKey.DemoMode),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Medium,
                         color = MaterialTheme.colorScheme.primary
                     )
 
                     Text(
-                        text = "Попробуйте приложение без регистрации",
+                        text = stringResource(StringKey.DemoModeDescription),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center,
@@ -376,7 +404,14 @@ fun LoginScreen(
                         onClick = {
                             errorMessage = null
                             isDemoLoading = true
-                            viewModel.login("user", "user")
+                            // Use dynamic demo credentials instead of hardcoded values
+                            val credentials = demoCredentials
+                            if (credentials != null && credentials.enabled) {
+                                viewModel.login(credentials.username, credentials.password)
+                            } else {
+                                errorMessage = "Demo mode is disabled"
+                                isDemoLoading = false
+                            }
                         },
                         enabled = !isDemoLoading && !isLoading,
                         shape = RoundedCornerShape(12.dp),
@@ -393,7 +428,7 @@ fun LoginScreen(
                             )
                         } else {
                             Text(
-                                "Войти в демо режим",
+                                stringResource(StringKey.DemoModeButton),
                                 fontWeight = FontWeight.Medium
                             )
                         }
@@ -423,7 +458,7 @@ fun LoginScreen(
                             modifier = Modifier.padding(16.dp)
                         )
                     }
-                    Log.d("Login Error", message)
+                    logger.d("Login error displayed: $message")
                 }
             }
 

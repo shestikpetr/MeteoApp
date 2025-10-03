@@ -78,12 +78,14 @@ class StationDataTransformer @Inject constructor() {
      */
     private fun transformSingleStation(station: StationInfo): StationWithLocation? {
         return try {
-            val coordinates = parseLocation(station.location!!)
             StationWithLocation(
                 stationNumber = station.station_number,
-                name = station.display_name,
-                latitude = coordinates.first,
-                longitude = coordinates.second
+                name = station.name ?: station.station_number,
+                latitude = station.getLatitudeDouble(),
+                longitude = station.getLongitudeDouble(),
+                customName = station.custom_name,
+                location = station.location,
+                isFavorite = station.is_favorite
             )
         } catch (e: Exception) {
             Log.e("StationDataTransformer", "Failed to transform station ${station.station_number}: ${e.message}")
@@ -240,19 +242,28 @@ class StationDataTransformer @Inject constructor() {
                 stationNumber = "60000105",
                 name = "60000105",
                 latitude = 56.460850,
-                longitude = 84.962327
+                longitude = 84.962327,
+                customName = "Demo 105",
+                location = "Томск",
+                isFavorite = false
             ),
             StationWithLocation(
                 stationNumber = "60000104",
                 name = "60000104",
                 latitude = 56.460039,
-                longitude = 84.962282
+                longitude = 84.962282,
+                customName = "Demo 104",
+                location = "Новосибирск",
+                isFavorite = false
             ),
             StationWithLocation(
                 stationNumber = "50000022",
                 name = "50000022",
                 latitude = 56.460337,
-                longitude = 84.961591
+                longitude = 84.961591,
+                customName = "Demo 022",
+                location = "Красноярск",
+                isFavorite = false
             )
         )
     }
@@ -268,9 +279,12 @@ class StationDataTransformer @Inject constructor() {
         return listOf(
             StationWithLocation(
                 stationNumber = "60000105",
-                name = "Томск (тестовая станция)",
+                name = "60000105",
                 latitude = 56.460850,
-                longitude = 84.962327
+                longitude = 84.962327,
+                customName = "Томск (тестовая станция)",
+                location = "Томск",
+                isFavorite = false
             )
         )
     }

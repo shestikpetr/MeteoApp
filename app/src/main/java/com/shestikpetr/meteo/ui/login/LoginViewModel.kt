@@ -1,66 +1,81 @@
 package com.shestikpetr.meteo.ui.login
 
-import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.shestikpetr.meteo.common.error.MeteoResult
+import com.shestikpetr.meteo.common.error.MeteoError
+import com.shestikpetr.meteo.common.logging.MeteoLogger
 import com.shestikpetr.meteo.network.AuthRepository
-import com.shestikpetr.meteo.network.LoginResult
+import com.shestikpetr.meteo.network.AuthTokens
 import com.shestikpetr.meteo.network.UserInfo
+import com.shestikpetr.meteo.localization.interfaces.LocalizationService
+import com.shestikpetr.meteo.localization.interfaces.StringKey
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+/**
+ * ViewModel for login and registration operations.
+ * Handles authentication state management with unified error handling.
+ */
 @HiltViewModel
 class LoginViewModel @Inject constructor(
-    private val authRepository: AuthRepository
+    private val authRepository: AuthRepository,
+    private val localizationService: LocalizationService
 ) : ViewModel() {
 
-    private val _loginState = MutableStateFlow<LoginResult?>(null)
-    val loginState: StateFlow<LoginResult?> = _loginState
+    private val logger = MeteoLogger.forClass(LoginViewModel::class)
 
-    // Функция для аутентификации пользователя
+    private val _loginState = MutableStateFlow<MeteoResult<AuthTokens>?>(null)
+    val loginState: StateFlow<MeteoResult<AuthTokens>?> = _loginState
+
+    /**
+     * Authenticates user with username and password.
+     */
     fun login(username: String, password: String) {
         viewModelScope.launch {
-            try {
-                // Отображаем процесс загрузки
-                _loginState.value = LoginResult.Loading
+            logger.startOperation("login", "username" to username)
 
-                val result = authRepository.login(username, password)
-                _loginState.value = result
+            // Show loading state
+            _loginState.value = MeteoResult.loading()
 
-                if (result is LoginResult.Success) {
-                    Log.d("LoginViewModel", "Авторизация успешна для user_id: ${result.userId}")
-                }
-            } catch (e: Exception) {
-                Log.e("LoginViewModel", "Ошибка авторизации: ${e.message}", e)
-                _loginState.value = LoginResult.Error(e.message ?: "Неизвестная ошибка")
+            val result = authRepository.login(username, password)
+            _loginState.value = result
+
+            result.onSuccess { tokens ->
+                logger.completeOperation("login", "user_id=${tokens.user_id}")
+            }.onError { error ->
+                logger.failOperation("login", error)
             }
         }
     }
 
-    // Функция для регистрации пользователя
+    /**
+     * Registers new user account.
+     */
     fun register(username: String, password: String, email: String) {
         viewModelScope.launch {
-            try {
-                // Отображаем процесс загрузки
-                _loginState.value = LoginResult.Loading
+            logger.startOperation("register", "username" to username, "email" to email)
 
-                val result = authRepository.register(username, password, email)
-                _loginState.value = result
+            // Show loading state
+            _loginState.value = MeteoResult.loading()
 
-                if (result is LoginResult.Success) {
-                    Log.d("LoginViewModel", "Регистрация успешна для user_id: ${result.userId}")
-                }
-            } catch (e: Exception) {
-                Log.e("LoginViewModel", "Ошибка регистрации: ${e.message}", e)
-                _loginState.value = LoginResult.Error(e.message ?: "Ошибка регистрации")
+            val result = authRepository.register(username, password, email)
+            _loginState.value = result
+
+            result.onSuccess { tokens ->
+                logger.completeOperation("register", "user_id=${tokens.user_id}")
+            }.onError { error ->
+                logger.failOperation("register", error)
             }
         }
     }
 
-    // Проверка, вошел ли пользователь в систему
+    /**
+     * Checks if user is currently logged in.
+     */
     fun checkLoggedIn(callback: (Boolean) -> Unit) {
         viewModelScope.launch {
             val isLoggedIn = authRepository.isLoggedIn()
@@ -68,19 +83,83 @@ class LoginViewModel @Inject constructor(
         }
     }
 
-    // Выход из системы
+    /**
+     * Logs out current user.
+     */
     fun logout() {
         viewModelScope.launch {
-            authRepository.logout()
-            _loginState.value = null
+            logger.startOperation("logout")
+            val result = authRepository.logout()
+
+            result.onSuccess {
+                _loginState.value = null
+                logger.completeOperation("logout")
+            }.onError { error ->
+                logger.failOperation("logout", error)
+                // Even if logout fails, clear the UI state
+                _loginState.value = null
+            }
         }
     }
 
-    // Получение информации о текущем пользователе
-    fun getCurrentUser(callback: (UserInfo?) -> Unit) {
+    /**
+     * Gets current user information.
+     */
+    fun getCurrentUser(callback: (MeteoResult<UserInfo>) -> Unit) {
         viewModelScope.launch {
-            val user = authRepository.getCurrentUser()
-            callback(user)
+            logger.startOperation("getCurrentUser")
+            val result = authRepository.getCurrentUser()
+
+            result.onSuccess { user ->
+                logger.completeOperation("getCurrentUser", user.username)
+            }.onError { error ->
+                logger.failOperation("getCurrentUser", error)
+            }
+
+            callback(result)
+        }
+    }
+
+    /**
+     * Forces logout and clears all authentication data.
+     * Used for handling authentication errors.
+     */
+    fun forceLogout() {
+        viewModelScope.launch {
+            logger.startOperation("forceLogout")
+            val result = authRepository.forceLogout()
+
+            result.onSuccess {
+                _loginState.value = null
+                logger.completeOperation("forceLogout")
+            }.onError { error ->
+                logger.failOperation("forceLogout", error)
+                // Even if force logout fails, clear the UI state
+                _loginState.value = null
+            }
+        }
+    }
+
+    /**
+     * Gets JWT token debug information.
+     */
+    fun debugJwtToken(callback: (String) -> Unit) {
+        viewModelScope.launch {
+            val debugInfo = authRepository.debugJwtToken()
+            callback(debugInfo)
+        }
+    }
+
+    /**
+     * Gets user-friendly error message from MeteoError.
+     */
+    fun getErrorMessage(error: MeteoError): String {
+        return when (error) {
+            is MeteoError.Auth.InvalidCredentials -> localizationService.getString(StringKey.LoginErrorInvalidCredentials)
+            is MeteoError.Auth.UserAlreadyExists -> localizationService.getString(StringKey.RegisterErrorUserExists)
+            is MeteoError.Network.NoConnection -> localizationService.getString(StringKey.ErrorUnknown)
+            is MeteoError.Network.Timeout -> localizationService.getString(StringKey.ErrorUnknown)
+            else -> error.getUserMessage()
         }
     }
 }

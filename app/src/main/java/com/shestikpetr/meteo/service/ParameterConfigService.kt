@@ -6,6 +6,7 @@ import com.shestikpetr.meteo.model.ParameterConfigSet
 import com.shestikpetr.meteo.network.AuthManager
 import com.shestikpetr.meteo.network.MeteoApiService
 import com.shestikpetr.meteo.network.ParameterInfo
+import com.shestikpetr.meteo.repository.interfaces.ParameterDisplayRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -15,29 +16,28 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Service for managing dynamic parameter configurations loaded from API.
- * Follows Single Responsibility Principle by focusing solely on parameter configuration management.
+ * Service for managing dynamic parameter configurations using repository pattern.
+ * Follows SOLID principles:
+ * - SRP: Focuses solely on parameter configuration service layer
+ * - OCP: Extensible through repository interface
+ * - LSP: Consistent service interface
+ * - ISP: Uses segregated repository interfaces
+ * - DIP: Depends on repository abstraction, not implementation
  *
  * This service handles:
- * - Loading parameter configurations from API for specific stations
- * - Caching parameter configurations per station and globally
- * - Providing fallback configurations when API is unavailable
- * - Managing default parameter selection
- * - Thread-safe operations for configuration access
+ * - High-level parameter configuration operations
+ * - State management for current station configuration
+ * - Global parameter configuration state
+ * - Service-layer caching and optimization
  */
 @Singleton
 class ParameterConfigService @Inject constructor(
-    private val meteoApiService: MeteoApiService,
-    private val authManager: AuthManager
+    private val parameterDisplayRepository: ParameterDisplayRepository
 ) {
     companion object {
         private const val TAG = "ParameterConfigService"
-        private const val GLOBAL_CACHE_KEY = "_global_"
+        private const val DEFAULT_LOCALE = "ru"
     }
-
-    // Cache for parameter configurations per station
-    private val stationConfigCache = mutableMapOf<String, ParameterConfigSet>()
-    private val cacheMutex = Mutex()
 
     // Global parameter configuration state
     private val _globalParameterConfig = MutableStateFlow(ParameterConfigSet.fallback())
@@ -47,31 +47,29 @@ class ParameterConfigService @Inject constructor(
     private val _currentStationConfig = MutableStateFlow(ParameterConfigSet.fallback())
     val currentStationConfig: StateFlow<ParameterConfigSet> = _currentStationConfig.asStateFlow()
 
+    // Current station number for state management
+    private var currentStationNumber: String? = null
+
+    // Current locale for localization
+    private var currentLocale: String = DEFAULT_LOCALE
+
     /**
      * Gets parameter configuration for a specific station.
-     * Uses cached data when available, loads from API otherwise.
+     * Uses repository layer with caching and fallback support.
      *
      * @param stationNumber The station number
+     * @param locale The locale for localized parameter names (default: current locale)
      * @return ParameterConfigSet for the station
      */
-    suspend fun getStationParameterConfig(stationNumber: String): ParameterConfigSet {
-        return cacheMutex.withLock {
-            // Check cache first
-            stationConfigCache[stationNumber]?.let { cachedConfig ->
-                Log.d(TAG, "Using cached parameter config for station $stationNumber (${cachedConfig.parameters.size} parameters)")
-                return@withLock cachedConfig
-            }
-
-            // Load from API if not cached
-            try {
-                val configSet = loadStationParameterConfig(stationNumber)
-                stationConfigCache[stationNumber] = configSet
-                Log.d(TAG, "Loaded ${configSet.parameters.size} parameters for station $stationNumber")
-                configSet
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to load parameters for station $stationNumber: ${e.message}")
-                ParameterConfigSet.fallback()
-            }
+    suspend fun getStationParameterConfig(stationNumber: String, locale: String = currentLocale): ParameterConfigSet {
+        return try {
+            val configSet = parameterDisplayRepository.getStationParameterConfig(stationNumber, locale)
+            Log.d(TAG, "Retrieved ${configSet.parameters.size} parameters for station $stationNumber")
+            configSet
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to load parameters for station $stationNumber: ${e.message}")
+            Log.d(TAG, "Using fallback configuration")
+            ParameterConfigSet.fallback()
         }
     }
 
@@ -79,80 +77,69 @@ class ParameterConfigService @Inject constructor(
      * Sets the current station and updates the current station config state.
      *
      * @param stationNumber The station number to set as current
+     * @param locale The locale for localized parameter names (optional)
      */
-    suspend fun setCurrentStation(stationNumber: String?) {
+    suspend fun setCurrentStation(stationNumber: String?, locale: String? = null) {
+        currentStationNumber = stationNumber
+        if (locale != null) {
+            currentLocale = locale
+        }
+
         if (stationNumber == null) {
             _currentStationConfig.value = ParameterConfigSet.fallback()
+            Log.d(TAG, "Cleared current station")
             return
         }
 
-        val configSet = getStationParameterConfig(stationNumber)
+        val configSet = getStationParameterConfig(stationNumber, currentLocale)
         _currentStationConfig.value = configSet
         Log.d(TAG, "Set current station $stationNumber with ${configSet.parameters.size} parameters")
     }
 
     /**
-     * Gets parameter code for legacy Parameters enum compatibility.
-     * This method provides backward compatibility during migration.
+     * Sets the current locale for parameter localization.
      *
-     * @param stationNumber The station number
-     * @param legacyParameter The legacy parameter type name
-     * @return The parameter code string
+     * @param locale The locale to use (e.g., "ru", "en")
      */
-    suspend fun getLegacyParameterCode(stationNumber: String, legacyParameter: String): String {
-        val configSet = getStationParameterConfig(stationNumber)
+    suspend fun setLocale(locale: String) {
+        if (currentLocale != locale) {
+            currentLocale = locale
+            Log.d(TAG, "Changed locale to $locale")
 
-        // Try to find parameter by name matching
-        val matchingParam = configSet.parameters.find { param ->
-            when (legacyParameter.uppercase()) {
-                "TEMPERATURE" -> param.name.lowercase().contains("температур") ||
-                                param.code.uppercase() == "T" ||
-                                param.code == "4402"
-                "HUMIDITY" -> param.name.lowercase().contains("влажность") ||
-                             param.code.uppercase() == "H" ||
-                             param.code == "5402"
-                "PRESSURE" -> param.name.lowercase().contains("давление") ||
-                             param.code.uppercase() == "P" ||
-                             param.code == "700"
-                else -> false
+            // Refresh current station config with new locale
+            currentStationNumber?.let { stationNumber ->
+                val configSet = getStationParameterConfig(stationNumber, locale)
+                _currentStationConfig.value = configSet
             }
-        }
 
-        return matchingParam?.code ?: run {
-            Log.w(TAG, "Legacy parameter $legacyParameter not found for station $stationNumber, using fallback")
-            getFallbackCode(legacyParameter)
+            // Refresh global config with new locale
+            loadGlobalParameterConfig()
         }
     }
 
     /**
      * Preloads parameter configurations for a station.
-     * Useful for preemptive loading when station is selected.
+     * This calls the repository which handles its own caching.
      *
      * @param stationNumber The station number to preload parameters for
+     * @param locale The locale for localized parameter names (optional)
      */
-    suspend fun preloadStationParameters(stationNumber: String) {
-        cacheMutex.withLock {
-            if (!stationConfigCache.containsKey(stationNumber)) {
-                try {
-                    val configSet = loadStationParameterConfig(stationNumber)
-                    stationConfigCache[stationNumber] = configSet
-                    Log.d(TAG, "Preloaded ${configSet.parameters.size} parameters for station $stationNumber")
-                } catch (e: Exception) {
-                    Log.e(TAG, "Failed to preload parameters for station $stationNumber: ${e.message}")
-                }
-            }
+    suspend fun preloadStationParameters(stationNumber: String, locale: String = currentLocale) {
+        try {
+            val configSet = parameterDisplayRepository.getStationParameterConfig(stationNumber, locale)
+            Log.d(TAG, "Preloaded ${configSet.parameters.size} parameters for station $stationNumber")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to preload parameters for station $stationNumber: ${e.message}")
         }
     }
 
     /**
-     * Loads global parameter configuration.
-     * This can be used to get all available parameter types across all stations.
+     * Loads global parameter configuration using repository.
+     * This gets all available parameter types across all stations.
      */
     suspend fun loadGlobalParameterConfig() {
         try {
-            // For now, use fallback global config
-            // In future, this could load from a global parameters endpoint
-            val globalConfig = ParameterConfigSet.fallback()
+            val globalConfig = parameterDisplayRepository.getGlobalParameterConfig(currentLocale)
             _globalParameterConfig.value = globalConfig
             Log.d(TAG, "Loaded global parameter config with ${globalConfig.parameters.size} parameters")
         } catch (e: Exception) {
@@ -169,8 +156,7 @@ class ParameterConfigService @Inject constructor(
      * @return true if parameter is available, false otherwise
      */
     suspend fun hasParameter(stationNumber: String, parameterCode: String): Boolean {
-        val configSet = getStationParameterConfig(stationNumber)
-        return configSet.hasParameter(parameterCode)
+        return parameterDisplayRepository.isParameterAvailableForStation(stationNumber, parameterCode)
     }
 
     /**
@@ -178,11 +164,23 @@ class ParameterConfigService @Inject constructor(
      *
      * @param stationNumber The station number
      * @param parameterCode The parameter code
+     * @param locale The locale for localized parameter names (optional)
      * @return ParameterConfig if found, null otherwise
      */
-    suspend fun getParameterConfig(stationNumber: String, parameterCode: String): ParameterConfig? {
-        val configSet = getStationParameterConfig(stationNumber)
+    suspend fun getParameterConfig(stationNumber: String, parameterCode: String, locale: String = currentLocale): ParameterConfig? {
+        val configSet = getStationParameterConfig(stationNumber, locale)
         return configSet.getByCode(parameterCode)
+    }
+
+    /**
+     * Gets parameter configuration by code (not station-specific).
+     *
+     * @param parameterCode The parameter code
+     * @param locale The locale for localized parameter names (optional)
+     * @return ParameterConfig if found, null otherwise
+     */
+    suspend fun getParameterConfigByCode(parameterCode: String, locale: String = currentLocale): ParameterConfig? {
+        return parameterDisplayRepository.getParameterConfig(parameterCode, locale)
     }
 
     /**
@@ -192,109 +190,21 @@ class ParameterConfigService @Inject constructor(
      * @param stationNumber The station number to clear cache for
      */
     suspend fun clearStationCache(stationNumber: String) {
-        cacheMutex.withLock {
-            stationConfigCache.remove(stationNumber)
-            Log.d(TAG, "Cleared parameter cache for station $stationNumber")
-        }
+        parameterDisplayRepository.refreshParameterConfigs(stationNumber)
+        Log.d(TAG, "Cleared parameter cache for station $stationNumber")
     }
 
     /**
      * Clears all cached parameter configurations.
      */
     suspend fun clearAllCache() {
-        cacheMutex.withLock {
-            stationConfigCache.clear()
-            Log.d(TAG, "Cleared all parameter cache")
-        }
+        parameterDisplayRepository.clearParameterConfigCache()
 
         // Reset to fallback configurations
         _globalParameterConfig.value = ParameterConfigSet.fallback()
         _currentStationConfig.value = ParameterConfigSet.fallback()
+
+        Log.d(TAG, "Cleared all parameter cache")
     }
 
-    /**
-     * Loads parameter configuration from API for a specific station.
-     *
-     * @param stationNumber The station number to load parameters for
-     * @return ParameterConfigSet with loaded configurations
-     */
-    private suspend fun loadStationParameterConfig(stationNumber: String): ParameterConfigSet {
-        val authToken = authManager.getAccessToken()
-            ?: throw IllegalStateException("No access token available")
-
-        Log.d(TAG, "Loading parameter config for station $stationNumber from API")
-
-        val response = meteoApiService.getStationParameters(stationNumber, "Bearer $authToken")
-
-        if (!response.isSuccessful) {
-            throw Exception("API request failed: ${response.code()} ${response.message()}")
-        }
-
-        val apiResponse = response.body()
-        if (apiResponse?.success != true) {
-            throw Exception("API response unsuccessful")
-        }
-
-        val parameterInfoList = apiResponse.data ?: emptyList()
-        Log.d(TAG, "Received ${parameterInfoList.size} parameters for station $stationNumber")
-
-        return createParameterConfigSet(parameterInfoList)
-    }
-
-    /**
-     * Creates ParameterConfigSet from API ParameterInfo list.
-     *
-     * @param parameterInfoList List of parameter information from API
-     * @return ParameterConfigSet with proper ordering and defaults
-     */
-    private fun createParameterConfigSet(parameterInfoList: List<ParameterInfo>): ParameterConfigSet {
-        val configs = parameterInfoList.mapIndexed { index, parameterInfo ->
-            ParameterConfig.fromParameterInfo(
-                parameterInfo = parameterInfo,
-                displayOrder = index + 1,
-                isDefault = isDefaultParameter(parameterInfo)
-            )
-        }
-
-        // Find default parameter (temperature preferred, then first available)
-        val defaultCode = configs.find { it.isDefault }?.code
-            ?: configs.find { it.name.lowercase().contains("температур") }?.code
-            ?: configs.firstOrNull()?.code
-
-        return ParameterConfigSet(
-            parameters = configs,
-            defaultParameterCode = defaultCode
-        )
-    }
-
-    /**
-     * Determines if a parameter should be marked as default.
-     *
-     * @param parameterInfo The parameter information
-     * @return true if this parameter should be default
-     */
-    private fun isDefaultParameter(parameterInfo: ParameterInfo): Boolean {
-        val name = parameterInfo.name.lowercase()
-        val code = parameterInfo.code.lowercase()
-
-        // Temperature is preferred default
-        return name.contains("температур") ||
-               code == "t" ||
-               code == "4402"
-    }
-
-    /**
-     * Gets fallback parameter code for legacy compatibility.
-     *
-     * @param legacyParameter The legacy parameter name
-     * @return Fallback parameter code
-     */
-    private fun getFallbackCode(legacyParameter: String): String {
-        return when (legacyParameter.uppercase()) {
-            "TEMPERATURE" -> "4402"
-            "HUMIDITY" -> "5402"
-            "PRESSURE" -> "700"
-            else -> throw IllegalArgumentException("No fallback code available for parameter: $legacyParameter")
-        }
-    }
 }

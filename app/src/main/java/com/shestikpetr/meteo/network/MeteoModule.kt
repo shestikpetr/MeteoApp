@@ -3,13 +3,18 @@ package com.shestikpetr.meteo.network
 import android.content.Context
 import android.util.Log
 import com.shestikpetr.meteo.cache.SensorDataCache
+import com.shestikpetr.meteo.common.error.UnifiedRetryPolicy
+import com.shestikpetr.meteo.config.AppConfig
+import com.shestikpetr.meteo.config.ConfigManager
 import com.shestikpetr.meteo.network.impl.OkHttpClientWrapper
 import com.shestikpetr.meteo.network.interfaces.HttpClient
+import com.shestikpetr.meteo.network.interfaces.SecureStorage
+import com.shestikpetr.meteo.storage.impl.SharedPreferencesStorage
 import com.shestikpetr.meteo.utils.LocationPermissionManager
 import com.shestikpetr.meteo.utils.MapKitLifecycleManager
 import com.shestikpetr.meteo.utils.RetryPolicy
 import com.shestikpetr.meteo.utils.StationDataTransformer
-import com.shestikpetr.meteo.storage.impl.SharedPreferencesStorage
+import dagger.Binds
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -26,13 +31,25 @@ import javax.inject.Singleton
 
 @Module
 @InstallIn(SingletonComponent::class)
-object MeteoModule {
-    @Provides
+abstract class MeteoModule {
+
+    @Binds
     @Singleton
-    fun providesOkHttpClient(): OkHttpClient {
-        // Создаем селективный логгер
+    abstract fun bindSecureStorage(
+        sharedPreferencesStorage: SharedPreferencesStorage
+    ): SecureStorage
+
+    companion object {
+        @Provides
+        @Singleton
+        fun providesOkHttpClient(appConfig: AppConfig): OkHttpClient {
+        // Создаем селективный логгер на основе конфигурации
         val logging = HttpLoggingInterceptor().apply {
-            level = HttpLoggingInterceptor.Level.HEADERS
+            level = if (appConfig.security.enableNetworkLogging) {
+                HttpLoggingInterceptor.Level.HEADERS
+            } else {
+                HttpLoggingInterceptor.Level.NONE
+            }
         }
 
         // Интерцептор для исправления проблем с Content-Length
@@ -83,12 +100,12 @@ object MeteoModule {
             }
         }
 
-        // Простой логгер для отладки
+        // Простой логгер для отладки (только если включено в конфигурации)
         val customLoggingInterceptor = Interceptor { chain ->
             val request = chain.request()
             val response = chain.proceed(request)
 
-            if (request.url.pathSegments.contains("latest")) {
+            if (appConfig.security.enableNetworkLogging && request.url.pathSegments.contains("latest")) {
                 Log.d("CUSTOM_HTTP", "URL: ${request.url}")
                 Log.d("CUSTOM_HTTP", "Response code: ${response.code}")
                 Log.d("CUSTOM_HTTP", "Content-Length: ${response.header("Content-Length")}")
@@ -99,88 +116,71 @@ object MeteoModule {
             response
         }
 
-        return OkHttpClient.Builder()
-            .addInterceptor(contentLengthFixInterceptor) // ПЕРВЫМ - исправляем данные
-            .addInterceptor(customLoggingInterceptor)    // ВТОРЫМ - логируем уже исправленные
-            .addInterceptor(logging)                     // ТРЕТЬИМ - стандартное логирование
-            .connectTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(30, TimeUnit.SECONDS)
-            .writeTimeout(30, TimeUnit.SECONDS)
-            .retryOnConnectionFailure(true)
-            .build()
-    }
+            return OkHttpClient.Builder()
+                .addInterceptor(contentLengthFixInterceptor) // ПЕРВЫМ - исправляем данные
+                .addInterceptor(customLoggingInterceptor)    // ВТОРЫМ - логируем уже исправленные
+                .addInterceptor(logging)                     // ТРЕТЬИМ - стандартное логирование
+                .connectTimeout(appConfig.network.connectTimeoutSeconds, TimeUnit.SECONDS)
+                .readTimeout(appConfig.network.readTimeoutSeconds, TimeUnit.SECONDS)
+                .writeTimeout(appConfig.network.writeTimeoutSeconds, TimeUnit.SECONDS)
+                .retryOnConnectionFailure(appConfig.network.retryOnConnectionFailure)
+                .build()
+        }
 
-    @Provides
-    @Singleton
-    fun providesRetrofit(okHttpClient: OkHttpClient): Retrofit {
-        return Retrofit.Builder()
-            .baseUrl("http://84.237.1.131:8085/api/v1/")
-            .client(okHttpClient)
-            .addConverterFactory(GsonConverterFactory.create())
-            .build()
-    }
+        @Provides
+        @Singleton
+        fun providesRetrofit(okHttpClient: OkHttpClient, appConfig: AppConfig): Retrofit {
+            return Retrofit.Builder()
+                .baseUrl(appConfig.network.baseUrl)
+                .client(okHttpClient)
+                .addConverterFactory(GsonConverterFactory.create())
+                .build()
+        }
 
-    @Provides
-    @Singleton
-    fun providesMeteoApiService(retrofit: Retrofit): MeteoApiService {
-        return retrofit.create(MeteoApiService::class.java)
-    }
+        @Provides
+        @Singleton
+        fun providesMeteoApiService(retrofit: Retrofit): MeteoApiService {
+            return retrofit.create(MeteoApiService::class.java)
+        }
 
+        @Provides
+        @Singleton
+        fun providesAuthRepository(
+            meteoApiService: MeteoApiService,
+            authManager: AuthManager,
+            retryPolicy: UnifiedRetryPolicy
+        ): AuthRepository {
+            return NetworkAuthRepository(meteoApiService, authManager, retryPolicy)
+        }
 
-    @Provides
-    @Singleton
-    fun providesAuthRepository(
-        meteoApiService: MeteoApiService,
-        authManager: AuthManager
-    ): AuthRepository {
-        return NetworkAuthRepository(meteoApiService, authManager)
-    }
+        @Provides
+        @Singleton
+        fun providesAuthManager(
+            storage: SharedPreferencesStorage,
+            meteoApiService: MeteoApiService
+        ): AuthManager {
+            return AuthManager(storage, meteoApiService)
+        }
 
-    @Provides
-    @Singleton
-    fun providesAuthManager(
-        storage: SharedPreferencesStorage,
-        meteoApiService: MeteoApiService
-    ): AuthManager {
-        return AuthManager(storage, meteoApiService)
-    }
+        // Utility classes are already annotated with @Singleton and @Inject constructor,
+        // so Hilt will automatically provide them without explicit @Provides methods.
 
-    // Utility classes are already annotated with @Singleton and @Inject constructor,
-    // so Hilt will automatically provide them. These explicit providers are for clarity.
+        @Provides
+        @Singleton
+        fun providesLocationPermissionManager(): LocationPermissionManager {
+            return LocationPermissionManager()
+        }
 
-    @Provides
-    @Singleton
-    fun providesSensorDataCache(): SensorDataCache {
-        return SensorDataCache()
-    }
+        @Provides
+        @Singleton
+        fun providesMapKitLifecycleManager(appConfig: AppConfig): MapKitLifecycleManager {
+            return MapKitLifecycleManager(appConfig.map)
+        }
 
-    @Provides
-    @Singleton
-    fun providesRetryPolicy(): RetryPolicy {
-        return RetryPolicy()
-    }
-
-    @Provides
-    @Singleton
-    fun providesStationDataTransformer(): StationDataTransformer {
-        return StationDataTransformer()
-    }
-
-    @Provides
-    @Singleton
-    fun providesLocationPermissionManager(): LocationPermissionManager {
-        return LocationPermissionManager()
-    }
-
-    @Provides
-    @Singleton
-    fun providesMapKitLifecycleManager(): MapKitLifecycleManager {
-        return MapKitLifecycleManager()
-    }
-
-    @Provides
-    @Singleton
-    fun providesHttpClient(): HttpClient {
-        return OkHttpClientWrapper()
+        @Provides
+        @Singleton
+        fun providesHttpClient(): HttpClient {
+            return OkHttpClientWrapper()
+        }
     }
 }

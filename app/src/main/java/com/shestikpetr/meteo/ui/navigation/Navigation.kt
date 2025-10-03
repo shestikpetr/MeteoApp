@@ -17,7 +17,15 @@ import com.shestikpetr.meteo.ui.screens.MapScreen
 import com.shestikpetr.meteo.ui.login.LoginScreen
 import com.shestikpetr.meteo.ui.login.LoginViewModel
 import com.shestikpetr.meteo.ui.stations.StationManagementScreen
-import com.shestikpetr.meteo.ui.Parameters
+import com.shestikpetr.meteo.config.utils.ValidationUtils
+import androidx.lifecycle.ViewModel
+import dagger.hilt.android.lifecycle.HiltViewModel
+import javax.inject.Inject
+
+@HiltViewModel
+class ValidationUtilsViewModel @Inject constructor(
+    val validationUtils: ValidationUtils
+) : ViewModel()
 
 sealed class Screen(val route: String) {
     data object Login : Screen("login")
@@ -33,7 +41,6 @@ fun MeteoApp(
     loginViewModel: LoginViewModel = hiltViewModel(),
     navController: NavHostController = rememberNavController()
 ) {
-    val mapUiState by mapViewModel.uiState.collectAsState()
     val chartUiState by chartViewModel.uiState.collectAsState()
 
     // Определяем стартовый экран на основе статуса авторизации
@@ -63,47 +70,8 @@ fun MeteoApp(
         }
 
         composable(Screen.Map.route) {
-            // Проверяем, загружены ли станции, если нет - загружаем
-            LaunchedEffect(Unit) {
-                if (mapUiState.userStations.isEmpty() && !mapUiState.isLoadingLatestData) {
-                    mapViewModel.loadUserStations()
-                }
-            }
-
-            // Convert ParameterConfig to legacy Parameters enum for UI compatibility
-            val legacySelectedParameter = mapUiState.selectedParameter?.let { paramConfig ->
-                when {
-                    paramConfig.name.lowercase().contains("температур") ||
-                    paramConfig.code.lowercase() == "t" ||
-                    paramConfig.code == "4402" -> Parameters.TEMPERATURE
-
-                    paramConfig.name.lowercase().contains("влажность") ||
-                    paramConfig.code.lowercase() == "h" ||
-                    paramConfig.code == "5402" -> Parameters.HUMIDITY
-
-                    paramConfig.name.lowercase().contains("давление") ||
-                    paramConfig.code.lowercase() == "p" ||
-                    paramConfig.code == "700" -> Parameters.PRESSURE
-
-                    else -> Parameters.TEMPERATURE // Default fallback
-                }
-            } ?: Parameters.TEMPERATURE
-
             MapScreen(
-                selectedParameter = legacySelectedParameter,
-                userStations = mapUiState.userStations,
-                latestSensorData = mapUiState.latestSensorData,
-                isLoadingLatestData = mapUiState.isLoadingLatestData,
-                onChangeMapParameter = { parameter ->
-                    mapViewModel.changeMapParameter(parameter)
-                },
-                onCameraZoomChange = { zoom ->
-                    mapViewModel.updateCameraZoom(zoom)
-                },
                 navController = navController,
-                onRefreshStations = {
-                    mapViewModel.forceRefreshData()
-                },
                 onLogout = {
                     // Выполняем logout
                     loginViewModel.logout()
@@ -133,31 +101,13 @@ fun MeteoApp(
                 chartViewModel.loadAvailableParameters(stationNumber)
             }
 
-            // Convert ParameterConfig to legacy Parameters enum for UI compatibility
-            val legacyChartParameter = chartUiState.selectedParameter?.let { paramConfig ->
-                when {
-                    paramConfig.name.lowercase().contains("температур") ||
-                    paramConfig.code.lowercase() == "t" ||
-                    paramConfig.code == "4402" -> Parameters.TEMPERATURE
-
-                    paramConfig.name.lowercase().contains("влажность") ||
-                    paramConfig.code.lowercase() == "h" ||
-                    paramConfig.code == "5402" -> Parameters.HUMIDITY
-
-                    paramConfig.name.lowercase().contains("давление") ||
-                    paramConfig.code.lowercase() == "p" ||
-                    paramConfig.code == "700" -> Parameters.PRESSURE
-
-                    else -> Parameters.TEMPERATURE // Default fallback
-                }
-            } ?: Parameters.TEMPERATURE
-
             ChartScreen(
                 chartViewModel = chartViewModel,
-                selectedChartParameter = legacyChartParameter,
+                selectedParameter = chartUiState.selectedParameter,
+                availableParameters = chartUiState.availableParameters,
                 selectedDateRange = chartUiState.selectedDateRange,
-                onChangeChartParameter = { parameter ->
-                    chartViewModel.changeChartParameter(parameter)
+                onChangeParameter = { parameterConfig ->
+                    chartViewModel.selectParameter(parameterConfig)
                 },
                 onChangeDateRange = { dateRange ->
                     chartViewModel.changeDateRange(dateRange)
@@ -171,7 +121,10 @@ fun MeteoApp(
         }
 
         composable(Screen.StationManagement.route) {
+            val validationUtilsViewModel: ValidationUtilsViewModel = hiltViewModel()
+
             StationManagementScreen(
+                validationUtils = validationUtilsViewModel.validationUtils,
                 onNavigateBack = {
                     navController.popBackStack()
                 }

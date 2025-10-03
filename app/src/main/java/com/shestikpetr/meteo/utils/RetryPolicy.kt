@@ -1,10 +1,14 @@
 package com.shestikpetr.meteo.utils
 
-import android.util.Log
+import com.shestikpetr.meteo.common.constants.MeteoConstants
+import com.shestikpetr.meteo.common.logging.MeteoLogger
+import com.shestikpetr.meteo.config.interfaces.RetryConfigRepository
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.runBlocking
 import retrofit2.HttpException
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.math.pow
 
 /**
  * Configurable retry policy for network operations with different strategies and error handling.
@@ -13,7 +17,11 @@ import javax.inject.Singleton
  * and customizable retry conditions based on the original retry logic from NetworkMeteoRepository.
  */
 @Singleton
-class RetryPolicy @Inject constructor() {
+class RetryPolicy @Inject constructor(
+    private val retryConfigRepository: RetryConfigRepository
+) {
+
+    private val logger = MeteoLogger.forClass(RetryPolicy::class)
 
     /**
      * Configuration for retry behavior.
@@ -25,7 +33,8 @@ class RetryPolicy @Inject constructor() {
         val useExponentialBackoff: Boolean = false,
         val retryOnHttpErrors: Boolean = true,
         val retryOnNetworkErrors: Boolean = true,
-        val retryOnJsonErrors: Boolean = true
+        val retryOnJsonErrors: Boolean = true,
+        val backoffMultiplier: Double = 2.0
     )
 
     /**
@@ -51,43 +60,43 @@ class RetryPolicy @Inject constructor() {
 
         repeat(config.maxAttempts) { attempt ->
             try {
-                Log.d("RetryPolicy", "Attempt ${attempt + 1}/${config.maxAttempts}")
+                logger.d("Attempt ${attempt + 1}/${config.maxAttempts}")
                 val result = operation(attempt)
-                Log.d("RetryPolicy", "Operation succeeded on attempt ${attempt + 1}")
+                logger.d("Operation succeeded on attempt ${attempt + 1}")
                 return RetryResult.Success(result)
             } catch (e: HttpException) {
                 lastException = e
-                Log.w("RetryPolicy", "HTTP error ${e.code()} on attempt ${attempt + 1}: ${e.message()}")
+                logger.w("HTTP error ${e.code()} on attempt ${attempt + 1}: ${e.message()}")
 
                 if (!config.retryOnHttpErrors) {
-                    Log.d("RetryPolicy", "HTTP errors disabled for retry, failing immediately")
+                    logger.d("HTTP errors disabled for retry, failing immediately")
                     return RetryResult.Failure(e, attempt + 1)
                 }
 
                 logHttpErrorDetails(e)
             } catch (e: com.google.gson.JsonSyntaxException) {
                 lastException = e
-                Log.w("RetryPolicy", "JSON parsing error on attempt ${attempt + 1}: ${e.message}")
+                logger.w("JSON parsing error on attempt ${attempt + 1}: ${e.message}")
 
                 if (!config.retryOnJsonErrors) {
-                    Log.d("RetryPolicy", "JSON errors disabled for retry, failing immediately")
+                    logger.d("JSON errors disabled for retry, failing immediately")
                     return RetryResult.Failure(e, attempt + 1)
                 }
             } catch (e: java.net.ProtocolException) {
                 lastException = e
-                Log.w("RetryPolicy", "Protocol error on attempt ${attempt + 1}: ${e.message}")
+                logger.w("Protocol error on attempt ${attempt + 1}: ${e.message}")
 
                 if (!config.retryOnNetworkErrors) {
-                    Log.d("RetryPolicy", "Network errors disabled for retry, failing immediately")
+                    logger.d("Network errors disabled for retry, failing immediately")
                     return RetryResult.Failure(e, attempt + 1)
                 }
             } catch (e: Exception) {
                 lastException = e
-                Log.w("RetryPolicy", "General error on attempt ${attempt + 1}: ${e.message}")
+                logger.w("General error on attempt ${attempt + 1}: ${e.message}")
 
                 // For other exceptions, only retry if network errors are enabled
                 if (!config.retryOnNetworkErrors) {
-                    Log.d("RetryPolicy", "General errors disabled for retry, failing immediately")
+                    logger.d("General errors disabled for retry, failing immediately")
                     return RetryResult.Failure(e, attempt + 1)
                 }
             }
@@ -95,13 +104,13 @@ class RetryPolicy @Inject constructor() {
             // Don't wait after the last attempt
             if (attempt < config.maxAttempts - 1) {
                 val delayMs = calculateDelay(attempt, config)
-                Log.d("RetryPolicy", "Waiting ${delayMs}ms before next attempt")
+                logger.d("Waiting ${delayMs}ms before next attempt")
                 delay(delayMs)
             }
         }
 
         val finalException = lastException ?: Exception("All retry attempts failed")
-        Log.e("RetryPolicy", "All ${config.maxAttempts} attempts failed", finalException)
+        logger.e("All ${config.maxAttempts} attempts failed", finalException)
         return RetryResult.Failure(finalException, config.maxAttempts)
     }
 
@@ -129,7 +138,7 @@ class RetryPolicy @Inject constructor() {
         return when (val result = executeWithRetry(config, operation)) {
             is RetryResult.Success -> result.data
             is RetryResult.Failure -> {
-                Log.w("RetryPolicy", "Using fallback value after ${result.attemptsMade} failed attempts")
+                logger.w("Using fallback value after ${result.attemptsMade} failed attempts")
                 fallbackValue
             }
         }
@@ -140,7 +149,7 @@ class RetryPolicy @Inject constructor() {
      */
     private fun calculateDelay(attempt: Int, config: RetryConfig): Long {
         return if (config.useExponentialBackoff) {
-            val exponentialDelay = config.baseDelayMs * (1L shl attempt) // 2^attempt
+            val exponentialDelay = config.baseDelayMs * config.backoffMultiplier.pow(attempt.toDouble()).toLong()
             minOf(exponentialDelay, config.maxDelayMs)
         } else {
             config.baseDelayMs
@@ -153,9 +162,9 @@ class RetryPolicy @Inject constructor() {
     private fun logHttpErrorDetails(e: HttpException) {
         try {
             val errorBody = e.response()?.errorBody()?.string()
-            Log.w("RetryPolicy", "HTTP error body: $errorBody")
+            logger.w("HTTP error body: $errorBody")
         } catch (bodyException: Exception) {
-            Log.w("RetryPolicy", "Could not read HTTP error body: ${bodyException.message}")
+            logger.w("Could not read HTTP error body: ${bodyException.message}")
         }
     }
 
@@ -173,23 +182,83 @@ class RetryPolicy @Inject constructor() {
 
     /**
      * Creates a retry configuration optimized for sensor data operations.
+     * Now uses dynamic configuration instead of hardcoded values.
      */
-    fun createSensorDataRetryConfig(): RetryConfig {
-        return RetryConfig(
-            maxAttempts = 3,
-            baseDelayMs = 1000L,
-            maxDelayMs = 3000L,
-            useExponentialBackoff = false,
-            retryOnHttpErrors = true,
-            retryOnNetworkErrors = true,
-            retryOnJsonErrors = true
+    suspend fun createSensorDataRetryConfig(): RetryConfig {
+        return retryConfigRepository.getSensorDataRetryConfig().fold(
+            onSuccess = { config ->
+                RetryConfig(
+                    maxAttempts = config.maxAttempts,
+                    baseDelayMs = config.baseDelayMs,
+                    maxDelayMs = config.maxDelayMs,
+                    useExponentialBackoff = config.useExponentialBackoff,
+                    retryOnHttpErrors = config.retryOnHttpErrors,
+                    retryOnNetworkErrors = config.retryOnNetworkErrors,
+                    retryOnJsonErrors = config.retryOnJsonErrors,
+                    backoffMultiplier = config.backoffMultiplier
+                )
+            },
+            onFailure = {
+                logger.w("Failed to get sensor data retry config, using defaults", it)
+                getDefaultSensorDataRetryConfig()
+            }
         )
     }
 
     /**
      * Creates a retry configuration optimized for station data operations.
+     * Now uses dynamic configuration instead of hardcoded values.
      */
-    fun createStationDataRetryConfig(): RetryConfig {
+    suspend fun createStationDataRetryConfig(): RetryConfig {
+        return retryConfigRepository.getStationDataRetryConfig().fold(
+            onSuccess = { config ->
+                RetryConfig(
+                    maxAttempts = config.maxAttempts,
+                    baseDelayMs = config.baseDelayMs,
+                    maxDelayMs = config.maxDelayMs,
+                    useExponentialBackoff = config.useExponentialBackoff,
+                    retryOnHttpErrors = config.retryOnHttpErrors,
+                    retryOnNetworkErrors = config.retryOnNetworkErrors,
+                    retryOnJsonErrors = config.retryOnJsonErrors,
+                    backoffMultiplier = config.backoffMultiplier
+                )
+            },
+            onFailure = {
+                logger.w("Failed to get station data retry config, using defaults", it)
+                getDefaultStationDataRetryConfig()
+            }
+        )
+    }
+
+    /**
+     * Synchronous versions of config creation for backward compatibility.
+     * Uses runBlocking internally - prefer the suspend versions when possible.
+     */
+    fun createSensorDataRetryConfigSync(): RetryConfig {
+        return runBlocking { createSensorDataRetryConfig() }
+    }
+
+    fun createStationDataRetryConfigSync(): RetryConfig {
+        return runBlocking { createStationDataRetryConfig() }
+    }
+
+    /**
+     * Default fallback configurations
+     */
+    private fun getDefaultSensorDataRetryConfig(): RetryConfig {
+        return RetryConfig(
+            maxAttempts = 3, // Original hardcoded value
+            baseDelayMs = 1000L, // Original hardcoded value
+            maxDelayMs = 3000L,
+            useExponentialBackoff = false,
+            retryOnHttpErrors = true,
+            retryOnNetworkErrors = true,
+            retryOnJsonErrors = true,
+            backoffMultiplier = 2.0
+        )
+    }
+
+    private fun getDefaultStationDataRetryConfig(): RetryConfig {
         return RetryConfig(
             maxAttempts = 2,
             baseDelayMs = 500L,
@@ -197,7 +266,8 @@ class RetryPolicy @Inject constructor() {
             useExponentialBackoff = true,
             retryOnHttpErrors = true,
             retryOnNetworkErrors = true,
-            retryOnJsonErrors = false // Station data parsing should be more strict
+            retryOnJsonErrors = false, // Station data parsing should be more strict
+            backoffMultiplier = 2.0
         )
     }
 }

@@ -3,6 +3,8 @@ package com.shestikpetr.meteo.storage.impl
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.core.content.edit
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKey
 import com.shestikpetr.meteo.network.interfaces.SecureStorage
 import com.shestikpetr.meteo.network.interfaces.StorageEditor
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -12,9 +14,9 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * SharedPreferences implementation of SecureStorage interface.
- * This implementation provides secure storage using Android's SharedPreferences,
- * adapted from the existing AuthManager implementation.
+ * Encrypted SharedPreferences implementation of SecureStorage interface.
+ * This implementation provides secure storage using Android's EncryptedSharedPreferences
+ * for enhanced security of sensitive data like JWT tokens.
  */
 @Singleton
 class SharedPreferencesStorage @Inject constructor(
@@ -22,7 +24,17 @@ class SharedPreferencesStorage @Inject constructor(
 ) : SecureStorage {
 
     private val prefs: SharedPreferences by lazy {
-        context.getSharedPreferences("MeteoPrefs", Context.MODE_PRIVATE)
+        val masterKey = MasterKey.Builder(context)
+            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+            .build()
+
+        EncryptedSharedPreferences.create(
+            context,
+            "MeteoSecurePrefs",
+            masterKey,
+            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+        )
     }
 
     override suspend fun putString(key: String, value: String) {

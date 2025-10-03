@@ -1,9 +1,13 @@
 package com.shestikpetr.meteo.repository
 
+import com.shestikpetr.meteo.repository.impl.CachedParameterDisplayRepository
 import com.shestikpetr.meteo.repository.impl.NetworkParameterMetadataRepository
+import com.shestikpetr.meteo.repository.impl.NetworkParameterVisibilityRepository
 import com.shestikpetr.meteo.repository.impl.NetworkSensorDataRepository
 import com.shestikpetr.meteo.repository.impl.NetworkStationRepository
+import com.shestikpetr.meteo.repository.interfaces.ParameterDisplayRepository
 import com.shestikpetr.meteo.repository.interfaces.ParameterMetadataRepository
+import com.shestikpetr.meteo.repository.interfaces.ParameterVisibilityRepository
 import com.shestikpetr.meteo.repository.interfaces.SensorDataRepository
 import com.shestikpetr.meteo.repository.interfaces.StationRepository
 import dagger.Binds
@@ -50,4 +54,24 @@ abstract class RepositoryModule {
     abstract fun bindParameterMetadataRepository(
         networkParameterMetadataRepository: NetworkParameterMetadataRepository
     ): ParameterMetadataRepository
+
+    /**
+     * Binds the ParameterDisplayRepository interface to its cached implementation.
+     * This allows services to depend on the interface while using the concrete cached implementation.
+     */
+    @Binds
+    @Singleton
+    abstract fun bindParameterDisplayRepository(
+        cachedParameterDisplayRepository: CachedParameterDisplayRepository
+    ): ParameterDisplayRepository
+
+    /**
+     * Binds the ParameterVisibilityRepository interface to its network implementation.
+     * This allows ViewModels to depend on the interface while using the concrete network implementation.
+     */
+    @Binds
+    @Singleton
+    abstract fun bindParameterVisibilityRepository(
+        networkParameterVisibilityRepository: NetworkParameterVisibilityRepository
+    ): ParameterVisibilityRepository
 }

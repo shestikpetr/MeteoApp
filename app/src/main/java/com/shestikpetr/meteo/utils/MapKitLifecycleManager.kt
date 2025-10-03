@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
+import com.shestikpetr.meteo.config.MapConfig
 import com.yandex.mapkit.MapKitFactory
 import ru.sulgik.mapkit.MapKit
 import javax.inject.Inject
@@ -13,14 +14,17 @@ import javax.inject.Singleton
  * Manages Yandex MapKit lifecycle and initialization.
  *
  * This class handles MapKit API key setup, initialization, and lifecycle management
- * based on the original logic from MainActivity. It provides automatic lifecycle
- * handling when attached to a LifecycleOwner.
+ * based on configuration system. It provides automatic lifecycle handling when
+ * attached to a LifecycleOwner. Now follows SOLID principles by depending on
+ * MapConfig abstraction instead of hardcoded values.
  */
 @Singleton
-class MapKitLifecycleManager @Inject constructor() : DefaultLifecycleObserver {
+class MapKitLifecycleManager @Inject constructor(
+    private val mapConfig: MapConfig
+) : DefaultLifecycleObserver {
 
     companion object {
-        private const val API_KEY = "e6cb4f2f-1295-4ffe-bfca-8ab2b9533d6a"
+        private const val TAG = "MapKitLifecycleManager"
         private var isApiKeySet = false
         private var isInitialized = false
     }
@@ -31,12 +35,20 @@ class MapKitLifecycleManager @Inject constructor() : DefaultLifecycleObserver {
     /**
      * Sets the MapKit API key if not already set.
      * This is a static operation that only needs to be done once per app lifecycle.
+     * Now uses configuration system instead of hardcoded value.
      */
     private fun setApiKeyIfNeeded() {
         if (!isApiKeySet) {
-            Log.d("MapKitLifecycleManager", "Setting MapKit API key")
-            MapKit.setApiKey(API_KEY)
-            isApiKeySet = true
+            Log.d(TAG, "Setting MapKit API key from configuration")
+            val apiKey = mapConfig.apiKey
+            if (apiKey.isNotBlank()) {
+                MapKit.setApiKey(apiKey)
+                isApiKeySet = true
+                Log.d(TAG, "MapKit API key set successfully")
+            } else {
+                Log.e(TAG, "MapKit API key is empty in configuration!")
+                throw IllegalStateException("MapKit API key is not configured")
+            }
         }
     }
 
@@ -50,18 +62,18 @@ class MapKitLifecycleManager @Inject constructor() : DefaultLifecycleObserver {
         this.context = context.applicationContext
 
         if (isInitialized) {
-            Log.d("MapKitLifecycleManager", "MapKit already initialized")
+            Log.d(TAG, "MapKit already initialized")
             return
         }
 
         try {
             setApiKeyIfNeeded()
-            Log.d("MapKitLifecycleManager", "Initializing MapKit")
+            Log.d(TAG, "Initializing MapKit")
             MapKitFactory.initialize(context)
             isInitialized = true
-            Log.d("MapKitLifecycleManager", "MapKit initialized successfully")
+            Log.d(TAG, "MapKit initialized successfully")
         } catch (e: Exception) {
-            Log.e("MapKitLifecycleManager", "Error initializing MapKit: ${e.message}", e)
+            Log.e(TAG, "Error initializing MapKit: ${e.message}", e)
             throw e
         }
     }
@@ -72,22 +84,22 @@ class MapKitLifecycleManager @Inject constructor() : DefaultLifecycleObserver {
      */
     fun start() {
         if (!isInitialized) {
-            Log.w("MapKitLifecycleManager", "MapKit not initialized, cannot start")
+            Log.w(TAG, "MapKit not initialized, cannot start")
             return
         }
 
         if (isStarted) {
-            Log.d("MapKitLifecycleManager", "MapKit already started")
+            Log.d(TAG, "MapKit already started")
             return
         }
 
         try {
-            Log.d("MapKitLifecycleManager", "Starting MapKit")
+            Log.d(TAG, "Starting MapKit")
             MapKitFactory.getInstance().onStart()
             isStarted = true
-            Log.d("MapKitLifecycleManager", "MapKit started successfully")
+            Log.d(TAG, "MapKit started successfully")
         } catch (e: Exception) {
-            Log.e("MapKitLifecycleManager", "Error starting MapKit: ${e.message}", e)
+            Log.e(TAG, "Error starting MapKit: ${e.message}", e)
         }
     }
 
@@ -97,17 +109,17 @@ class MapKitLifecycleManager @Inject constructor() : DefaultLifecycleObserver {
      */
     fun stop() {
         if (!isStarted) {
-            Log.d("MapKitLifecycleManager", "MapKit not started, nothing to stop")
+            Log.d(TAG, "MapKit not started, nothing to stop")
             return
         }
 
         try {
-            Log.d("MapKitLifecycleManager", "Stopping MapKit")
+            Log.d(TAG, "Stopping MapKit")
             MapKitFactory.getInstance().onStop()
             isStarted = false
-            Log.d("MapKitLifecycleManager", "MapKit stopped successfully")
+            Log.d(TAG, "MapKit stopped successfully")
         } catch (e: Exception) {
-            Log.e("MapKitLifecycleManager", "Error stopping MapKit: ${e.message}", e)
+            Log.e(TAG, "Error stopping MapKit: ${e.message}", e)
         }
     }
 
@@ -117,11 +129,11 @@ class MapKitLifecycleManager @Inject constructor() : DefaultLifecycleObserver {
      */
     fun restart() {
         if (!isInitialized) {
-            Log.w("MapKitLifecycleManager", "MapKit not initialized, cannot restart")
+            Log.w(TAG, "MapKit not initialized, cannot restart")
             return
         }
 
-        Log.d("MapKitLifecycleManager", "Restarting MapKit")
+        Log.d(TAG, "Restarting MapKit")
         stop()
         start()
     }
@@ -165,7 +177,7 @@ class MapKitLifecycleManager @Inject constructor() : DefaultLifecycleObserver {
      */
     override fun onStart(owner: LifecycleOwner) {
         super.onStart(owner)
-        Log.d("MapKitLifecycleManager", "Lifecycle onStart")
+        Log.d(TAG, "Lifecycle onStart")
         start()
     }
 
@@ -174,7 +186,7 @@ class MapKitLifecycleManager @Inject constructor() : DefaultLifecycleObserver {
      */
     override fun onStop(owner: LifecycleOwner) {
         super.onStop(owner)
-        Log.d("MapKitLifecycleManager", "Lifecycle onStop")
+        Log.d(TAG, "Lifecycle onStop")
         stop()
     }
 
@@ -183,7 +195,7 @@ class MapKitLifecycleManager @Inject constructor() : DefaultLifecycleObserver {
      */
     override fun onDestroy(owner: LifecycleOwner) {
         super.onDestroy(owner)
-        Log.d("MapKitLifecycleManager", "Lifecycle onDestroy")
+        Log.d(TAG, "Lifecycle onDestroy")
         cleanup()
     }
 
@@ -193,7 +205,7 @@ class MapKitLifecycleManager @Inject constructor() : DefaultLifecycleObserver {
      * @param lifecycleOwner The lifecycle owner (typically an Activity or Fragment)
      */
     fun attachToLifecycle(lifecycleOwner: LifecycleOwner) {
-        Log.d("MapKitLifecycleManager", "Attaching to lifecycle: ${lifecycleOwner.javaClass.simpleName}")
+        Log.d(TAG, "Attaching to lifecycle: ${lifecycleOwner.javaClass.simpleName}")
         lifecycleOwner.lifecycle.addObserver(this)
     }
 
@@ -203,7 +215,7 @@ class MapKitLifecycleManager @Inject constructor() : DefaultLifecycleObserver {
      * @param lifecycleOwner The lifecycle owner to detach from
      */
     fun detachFromLifecycle(lifecycleOwner: LifecycleOwner) {
-        Log.d("MapKitLifecycleManager", "Detaching from lifecycle: ${lifecycleOwner.javaClass.simpleName}")
+        Log.d(TAG, "Detaching from lifecycle: ${lifecycleOwner.javaClass.simpleName}")
         lifecycleOwner.lifecycle.removeObserver(this)
     }
 
@@ -211,7 +223,7 @@ class MapKitLifecycleManager @Inject constructor() : DefaultLifecycleObserver {
      * Cleans up resources and references.
      */
     private fun cleanup() {
-        Log.d("MapKitLifecycleManager", "Cleaning up MapKit lifecycle manager")
+        Log.d(TAG, "Cleaning up MapKit lifecycle manager")
         context = null
         // Note: We don't reset static flags as MapKit state persists across activity recreations
     }
@@ -228,7 +240,7 @@ class MapKitLifecycleManager @Inject constructor() : DefaultLifecycleObserver {
             initialize(context)
             true
         } catch (e: Exception) {
-            Log.e("MapKitLifecycleManager", "Safe initialization failed: ${e.message}", e)
+            Log.e(TAG, "Safe initialization failed: ${e.message}", e)
             false
         }
     }
@@ -244,18 +256,32 @@ class MapKitLifecycleManager @Inject constructor() : DefaultLifecycleObserver {
             start()
             isStarted
         } catch (e: Exception) {
-            Log.e("MapKitLifecycleManager", "Safe start failed: ${e.message}", e)
+            Log.e(TAG, "Safe start failed: ${e.message}", e)
             false
         }
     }
 
     /**
      * Gets the API key used for MapKit (for debugging purposes).
-     * Note: In production, this should be handled more securely.
+     * Now retrieves from configuration instead of hardcoded value.
      *
-     * @return The MapKit API key
+     * @return The MapKit API key from configuration
      */
-    fun getApiKey(): String = API_KEY
+    fun getApiKey(): String = mapConfig.apiKey
+
+    /**
+     * Gets the default zoom level from configuration.
+     *
+     * @return The default zoom level
+     */
+    fun getDefaultZoomLevel(): Float = mapConfig.defaultZoomLevel
+
+    /**
+     * Checks if clustering is enabled in configuration.
+     *
+     * @return true if clustering is enabled
+     */
+    fun isClusteringEnabled(): Boolean = mapConfig.enableClustering
 
     /**
      * Checks if the MapKit factory instance is available.
@@ -267,7 +293,7 @@ class MapKitLifecycleManager @Inject constructor() : DefaultLifecycleObserver {
             MapKitFactory.getInstance()
             true
         } catch (e: Exception) {
-            Log.w("MapKitLifecycleManager", "MapKit factory not available: ${e.message}")
+            Log.w(TAG, "MapKit factory not available: ${e.message}")
             false
         }
     }

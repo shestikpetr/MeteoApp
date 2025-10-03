@@ -33,13 +33,21 @@ interface SensorDataRepository {
      *
      * @param stationNumber The 8-digit station number
      * @param parameter The parameter to retrieve the latest value for
-     * @return The latest sensor value, or a special error value (-1000.0) if all attempts fail
+     * @return The latest sensor value, or a fallback value (-99.0) if data is unavailable
      * @throws Exception if the request fails due to authentication or network issues
      */
     suspend fun getLatestSensorData(
         stationNumber: String,
         parameter: String
     ): Double
+
+    /**
+     * Checks if the given value represents unavailable data (fallback value).
+     *
+     * @param value The sensor data value to check
+     * @return true if the value represents unavailable data, false otherwise
+     */
+    fun isDataUnavailable(value: Double): Boolean
 
     /**
      * Retrieves sensor data for multiple parameters at once.
@@ -106,4 +114,13 @@ interface SensorDataRepository {
      * @throws Exception if the request fails or authentication is invalid
      */
     suspend fun getAllStationsLatestData(): Map<String, Map<String, Double>>
+
+    /**
+     * Gets the complete station data with coordinates and latest sensor values.
+     * This is the primary method for map display using /api/v1/data/latest endpoint.
+     *
+     * @return Pair of (list of stations with locations, map of station number to parameter data)
+     * @throws Exception if the request fails or authentication is invalid
+     */
+    suspend fun getAllStationsWithLocationAndData(): Pair<List<com.shestikpetr.meteo.data.StationWithLocation>, Map<String, Map<String, Double>>>
 }

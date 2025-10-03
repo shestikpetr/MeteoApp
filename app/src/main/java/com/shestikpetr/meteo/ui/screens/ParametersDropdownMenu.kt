@@ -32,12 +32,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.shestikpetr.meteo.ui.Parameters
+import com.shestikpetr.meteo.model.ParameterConfig
 
 @Composable
 fun ParametersDropdownMenu(
-    selectedParameter: Parameters,
-    onChangeParameter: (Parameters) -> Unit,
+    selectedParameter: ParameterConfig?,
+    availableParameters: List<ParameterConfig>,
+    onChangeParameter: (ParameterConfig) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -46,11 +47,8 @@ fun ParametersDropdownMenu(
         label = "dropdownRotation"
     )
 
-    val parameterList = listOf(
-        Parameters.TEMPERATURE to "Температура",
-        Parameters.HUMIDITY to "Влажность",
-        Parameters.PRESSURE to "Давление"
-    )
+    // Show placeholder if no parameter selected
+    val displayText = selectedParameter?.displayText ?: "Выберите параметр"
 
     Box(
         modifier = modifier
@@ -75,10 +73,15 @@ fun ParametersDropdownMenu(
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
             ) {
                 Text(
-                    text = parameterList.first { it.first == selectedParameter }.second,
+                    text = displayText,
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.weight(1f),
-                    textAlign = TextAlign.Start
+                    textAlign = TextAlign.Start,
+                    color = if (selectedParameter != null) {
+                        MaterialTheme.colorScheme.onSurface
+                    } else {
+                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    }
                 )
 
                 Spacer(modifier = Modifier.width(8.dp))
@@ -101,17 +104,17 @@ fun ParametersDropdownMenu(
                 .widthIn(min = 150.dp)
                 .background(MaterialTheme.colorScheme.surface)
         ) {
-            parameterList.forEach { (parameter, name) ->
+            availableParameters.forEach { parameter ->
                 DropdownMenuItem(
                     text = {
                         Text(
-                            text = name,
+                            text = parameter.displayText,
                             style = MaterialTheme.typography.bodyMedium
                         )
                     },
                     onClick = {
                         expanded = false
-                        if (selectedParameter != parameter) {
+                        if (selectedParameter?.code != parameter.code) {
                             onChangeParameter(parameter)
                         }
                     },

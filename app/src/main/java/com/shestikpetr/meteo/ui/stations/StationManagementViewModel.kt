@@ -1,6 +1,6 @@
 package com.shestikpetr.meteo.ui.stations
 
-import android.util.Log
+import com.shestikpetr.meteo.common.logging.MeteoLogger
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.shestikpetr.meteo.network.AddStationRequest
@@ -38,7 +38,7 @@ class StationManagementViewModel @Inject constructor(
     val uiState: StateFlow<StationManagementUiState> = _uiState.asStateFlow()
 
     companion object {
-        private const val TAG = "StationManagementVM"
+        private val logger = MeteoLogger.forClass(StationManagementViewModel::class)
     }
 
     /**
@@ -64,7 +64,7 @@ class StationManagementViewModel @Inject constructor(
 
                 if (response.isSuccessful && response.body()?.success == true) {
                     val stations = response.body()?.data ?: emptyList()
-                    Log.d(TAG, "Loaded ${stations.size} stations")
+                    logger.d("Loaded ${stations.size} stations")
 
                     _uiState.update {
                         it.copy(
@@ -75,7 +75,7 @@ class StationManagementViewModel @Inject constructor(
                     }
                 } else {
                     val errorBody = response.errorBody()?.string()
-                    Log.e(TAG, "Failed to load stations: ${response.code()}, $errorBody")
+                    logger.e("Failed to load stations: ${response.code()}, $errorBody")
 
                     _uiState.update {
                         it.copy(
@@ -85,7 +85,7 @@ class StationManagementViewModel @Inject constructor(
                     }
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Error loading stations", e)
+                logger.e("Error loading stations", e)
                 _uiState.update {
                     it.copy(
                         isLoading = false,
@@ -130,7 +130,7 @@ class StationManagementViewModel @Inject constructor(
                 val response = meteoApiService.addStation(authHeader, request)
 
                 if (response.isSuccessful && response.body()?.success == true) {
-                    Log.d(TAG, "Successfully added station $stationNumber")
+                    logger.d("Successfully added station $stationNumber")
 
                     _uiState.update { it.copy(isLoading = false) }
 
@@ -138,7 +138,7 @@ class StationManagementViewModel @Inject constructor(
                     loadUserStations()
                 } else {
                     val errorBody = response.errorBody()?.string()
-                    Log.e(TAG, "Failed to add station: ${response.code()}, $errorBody")
+                    logger.e("Failed to add station: ${response.code()}, $errorBody")
 
                     val errorMessage = when (response.code()) {
                         400 -> "Неверный формат номера станции"
@@ -155,7 +155,7 @@ class StationManagementViewModel @Inject constructor(
                     }
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Error adding station", e)
+                logger.e("Error adding station", e)
                 _uiState.update {
                     it.copy(
                         isLoading = false,
@@ -188,7 +188,7 @@ class StationManagementViewModel @Inject constructor(
                 val response = meteoApiService.removeStation(stationNumber, authHeader)
 
                 if (response.isSuccessful && response.body()?.success == true) {
-                    Log.d(TAG, "Successfully removed station $stationNumber")
+                    logger.d("Successfully removed station $stationNumber")
 
                     // Remove station from current list immediately
                     _uiState.update { currentState ->
@@ -199,7 +199,7 @@ class StationManagementViewModel @Inject constructor(
                     }
                 } else {
                     val errorBody = response.errorBody()?.string()
-                    Log.e(TAG, "Failed to remove station: ${response.code()}, $errorBody")
+                    logger.e("Failed to remove station: ${response.code()}, $errorBody")
 
                     _uiState.update {
                         it.copy(
@@ -209,7 +209,7 @@ class StationManagementViewModel @Inject constructor(
                     }
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Error removing station", e)
+                logger.e("Error removing station", e)
                 _uiState.update {
                     it.copy(
                         isLoading = false,
@@ -239,15 +239,18 @@ class StationManagementViewModel @Inject constructor(
                     return@launch
                 }
 
-                val request = UpdateStationRequest(
-                    custom_name = newName.ifBlank { null },
-                    is_favorite = null // Don't change favorite status
+                // Use query parameters instead of request body
+                val customName = newName.ifBlank { null }
+
+                val response = meteoApiService.updateStation(
+                    stationNumber = stationNumber,
+                    authToken = authHeader,
+                    customName = customName,
+                    isFavorite = null // Don't change favorite status
                 )
 
-                val response = meteoApiService.updateStation(stationNumber, authHeader, request)
-
                 if (response.isSuccessful && response.body()?.success == true) {
-                    Log.d(TAG, "Successfully updated station $stationNumber name to '$newName'")
+                    logger.d("Successfully updated station $stationNumber name to '$newName'")
 
                     // Update station in current list immediately
                     _uiState.update { currentState ->
@@ -267,7 +270,7 @@ class StationManagementViewModel @Inject constructor(
                     }
                 } else {
                     val errorBody = response.errorBody()?.string()
-                    Log.e(TAG, "Failed to update station: ${response.code()}, $errorBody")
+                    logger.e("Failed to update station: ${response.code()}, $errorBody")
 
                     _uiState.update {
                         it.copy(
@@ -277,7 +280,7 @@ class StationManagementViewModel @Inject constructor(
                     }
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Error updating station", e)
+                logger.e("Error updating station", e)
                 _uiState.update {
                     it.copy(
                         isLoading = false,
@@ -294,7 +297,7 @@ class StationManagementViewModel @Inject constructor(
     fun toggleFavorite(stationNumber: String) {
         val currentStation = _uiState.value.stations.find { it.station_number == stationNumber }
         if (currentStation == null) {
-            Log.w(TAG, "Station $stationNumber not found in current list")
+            logger.w("Station $stationNumber not found in current list")
             return
         }
 
@@ -313,15 +316,18 @@ class StationManagementViewModel @Inject constructor(
                     return@launch
                 }
 
-                val request = UpdateStationRequest(
-                    custom_name = null, // Don't change name
-                    is_favorite = !currentStation.is_favorite
+                // Use query parameters instead of request body
+                val newFavoriteStatus = !currentStation.is_favorite
+
+                val response = meteoApiService.updateStation(
+                    stationNumber = stationNumber,
+                    authToken = authHeader,
+                    customName = null, // Don't change name
+                    isFavorite = newFavoriteStatus
                 )
 
-                val response = meteoApiService.updateStation(stationNumber, authHeader, request)
-
                 if (response.isSuccessful && response.body()?.success == true) {
-                    Log.d(TAG, "Successfully toggled favorite for station $stationNumber")
+                    logger.d("Successfully toggled favorite for station $stationNumber")
 
                     // Update station in current list immediately
                     _uiState.update { currentState ->
@@ -338,7 +344,7 @@ class StationManagementViewModel @Inject constructor(
                     }
                 } else {
                     val errorBody = response.errorBody()?.string()
-                    Log.e(TAG, "Failed to toggle favorite: ${response.code()}, $errorBody")
+                    logger.e("Failed to toggle favorite: ${response.code()}, $errorBody")
 
                     _uiState.update {
                         it.copy(
@@ -348,7 +354,7 @@ class StationManagementViewModel @Inject constructor(
                     }
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Error toggling favorite", e)
+                logger.e("Error toggling favorite", e)
                 _uiState.update {
                     it.copy(
                         isLoading = false,

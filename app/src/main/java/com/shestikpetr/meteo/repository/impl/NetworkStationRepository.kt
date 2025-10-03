@@ -80,9 +80,12 @@ class NetworkStationRepository @Inject constructor(
                         .map { station ->
                             StationWithLocation(
                                 stationNumber = station.station_number,
-                                name = station.display_name,
-                                latitude = station.latitude,
-                                longitude = station.longitude
+                                name = station.name ?: station.station_number,
+                                latitude = station.getLatitudeDouble(),
+                                longitude = station.getLongitudeDouble(),
+                                customName = station.custom_name,
+                                location = station.location,
+                                isFavorite = station.is_favorite
                             )
                         }
                 } catch (e: Exception) {
@@ -102,13 +105,39 @@ class NetworkStationRepository @Inject constructor(
     }
 
     override suspend fun getStationParameters(stationId: String): List<ParameterInfo> {
+        // First try to get parameters from already loaded stations data
+        try {
+            val stationInfo = getStationInfo(stationId)
+            if (stationInfo != null) {
+                val activeParameters = stationInfo.getParameterInfoList()
+                if (activeParameters.isNotEmpty()) {
+                    Log.d("StationRepository", "Using ${activeParameters.size} active parameters from stations cache for $stationId")
+                    return activeParameters
+                }
+            }
+        } catch (e: Exception) {
+            Log.w("StationRepository", "Could not get parameters from station cache: ${e.message}")
+        }
+
+        // Fallback to API call if needed
         val authHeader = authManager.getAuthorizationHeader()
             ?: throw SecurityException("No valid authentication token")
         val response = meteoApiService.getStationParameters(stationId, authHeader)
         if (!response.isSuccessful || response.body()?.success != true) {
             throw RuntimeException("Failed to get station parameters")
         }
-        return response.body()?.data ?: emptyList()
+
+        // Convert ParameterVisibilityInfo to ParameterInfo
+        val visibilityParams = response.body()?.data ?: emptyList()
+        return visibilityParams.map { visParam ->
+            ParameterInfo(
+                code = visParam.code,
+                name = visParam.name,
+                unit = visParam.unit ?: "",
+                description = visParam.description ?: "",
+                category = visParam.category ?: ""
+            )
+        }
     }
 
     override suspend fun getStationInfo(stationId: String): StationInfo? {
@@ -192,19 +221,28 @@ class NetworkStationRepository @Inject constructor(
                 stationNumber = "60000105",
                 name = "60000105",
                 latitude = 56.460850,
-                longitude = 84.962327
+                longitude = 84.962327,
+                customName = "Demo 105",
+                location = "Томск",
+                isFavorite = false
             ),
             StationWithLocation(
                 stationNumber = "60000104",
                 name = "60000104",
                 latitude = 56.460039,
-                longitude = 84.962282
+                longitude = 84.962282,
+                customName = "Demo 104",
+                location = "Новосибирск",
+                isFavorite = false
             ),
             StationWithLocation(
                 stationNumber = "50000022",
                 name = "50000022",
                 latitude = 56.460337,
-                longitude = 84.961591
+                longitude = 84.961591,
+                customName = "Demo 022",
+                location = "Красноярск",
+                isFavorite = false
             )
         )
     }

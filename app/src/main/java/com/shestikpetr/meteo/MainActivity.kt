@@ -7,6 +7,8 @@ import com.shestikpetr.meteo.ui.navigation.MeteoApp
 import com.shestikpetr.meteo.ui.theme.MeteoTheme
 import com.shestikpetr.meteo.utils.LocationPermissionManager
 import com.shestikpetr.meteo.utils.MapKitLifecycleManager
+import com.shestikpetr.meteo.localization.interfaces.StringResourceManager
+import com.shestikpetr.meteo.localization.compose.LocalizationProvider
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 
@@ -18,6 +20,9 @@ class MainActivity : ComponentActivity() {
 
     @Inject
     lateinit var mapKitLifecycleManager: MapKitLifecycleManager
+
+    @Inject
+    lateinit var stringResourceManager: StringResourceManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -36,7 +41,9 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             MeteoTheme {
-                MeteoApp()
+                LocalizationProvider(stringResourceManager) {
+                    MeteoApp()
+                }
             }
         }
     }

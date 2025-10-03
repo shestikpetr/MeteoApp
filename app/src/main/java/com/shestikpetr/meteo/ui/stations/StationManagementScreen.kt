@@ -18,6 +18,9 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.compose.runtime.collectAsState
 import com.shestikpetr.meteo.network.StationInfo
+import com.shestikpetr.meteo.localization.compose.stringResource
+import com.shestikpetr.meteo.localization.interfaces.StringKey
+import com.shestikpetr.meteo.config.utils.ValidationUtils
 
 /**
  * Station Management Screen - allows users to add, remove, and edit stations
@@ -27,8 +30,10 @@ import com.shestikpetr.meteo.network.StationInfo
 @Composable
 fun StationManagementScreen(
     viewModel: StationManagementViewModel = hiltViewModel(),
+    validationUtils: ValidationUtils,
     onNavigateBack: () -> Unit
 ) {
+
     val uiState by viewModel.uiState.collectAsState()
     val keyboardController = LocalSoftwareKeyboardController.current
 
@@ -48,11 +53,11 @@ fun StationManagementScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "Управление станциями",
+                text = stringResource(StringKey.StationManagement),
                 style = MaterialTheme.typography.headlineMedium
             )
             IconButton(onClick = onNavigateBack) {
-                Icon(Icons.Default.ArrowBack, contentDescription = "Назад")
+                Icon(Icons.Default.ArrowBack, contentDescription = stringResource(StringKey.Back))
             }
         }
 
@@ -64,14 +69,15 @@ fun StationManagementScreen(
                 viewModel.addStation(stationNumber, customName)
                 keyboardController?.hide()
             },
-            isLoading = uiState.isLoading
+            isLoading = uiState.isLoading,
+            validationUtils = validationUtils
         )
 
         Spacer(modifier = Modifier.height(24.dp))
 
         // Stations list
         Text(
-            text = "Мои станции",
+            text = stringResource(StringKey.MyStations),
             style = MaterialTheme.typography.headlineSmall
         )
 
@@ -91,7 +97,7 @@ fun StationManagementScreen(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
-                        text = "У вас пока нет добавленных станций",
+                        text = stringResource(StringKey.NoStationsAdded),
                         modifier = Modifier.padding(16.dp),
                         style = MaterialTheme.typography.bodyMedium
                     )
@@ -136,7 +142,8 @@ fun StationManagementScreen(
 @Composable
 private fun AddStationSection(
     onAddStation: (String, String?) -> Unit,
-    isLoading: Boolean
+    isLoading: Boolean,
+    validationUtils: ValidationUtils
 ) {
     var stationNumber by remember { mutableStateOf("") }
     var customName by remember { mutableStateOf("") }
@@ -146,7 +153,7 @@ private fun AddStationSection(
             modifier = Modifier.padding(16.dp)
         ) {
             Text(
-                text = "Добавить станцию",
+                text = stringResource(StringKey.AddStation),
                 style = MaterialTheme.typography.titleMedium
             )
 
@@ -154,16 +161,21 @@ private fun AddStationSection(
 
             OutlinedTextField(
                 value = stationNumber,
-                onValueChange = { if (it.length <= 8 && it.all { char -> char.isDigit() }) stationNumber = it },
-                label = { Text("Номер станции (8 цифр)") },
-                placeholder = { Text("12345678") },
+                onValueChange = { input ->
+                    val filteredInput = validationUtils.getStationNumberInputFilter()(input)
+                    if (validationUtils.validateStationNumberInput(filteredInput)) {
+                        stationNumber = filteredInput
+                    }
+                },
+                label = { Text(stringResource(StringKey.StationNumber)) },
+                placeholder = { Text(stringResource(StringKey.StationNumberPlaceholder)) },
                 modifier = Modifier.fillMaxWidth(),
                 keyboardOptions = KeyboardOptions(
                     keyboardType = KeyboardType.Number,
                     imeAction = ImeAction.Next
                 ),
                 singleLine = true,
-                supportingText = { Text("Введите 8-значный номер станции") }
+                supportingText = { Text(stringResource(StringKey.StationNumberHelp)) }
             )
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -171,8 +183,8 @@ private fun AddStationSection(
             OutlinedTextField(
                 value = customName,
                 onValueChange = { customName = it },
-                label = { Text("Название (необязательно)") },
-                placeholder = { Text("Моя станция") },
+                label = { Text(stringResource(StringKey.StationNameOptional)) },
+                placeholder = { Text(stringResource(StringKey.StationNamePlaceholder)) },
                 modifier = Modifier.fillMaxWidth(),
                 keyboardOptions = KeyboardOptions(
                     imeAction = ImeAction.Done
@@ -207,7 +219,7 @@ private fun AddStationSection(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                 }
-                Text("Добавить станцию")
+                Text(stringResource(StringKey.AddStationButton))
             }
         }
     }
@@ -250,7 +262,7 @@ private fun StationItem(
                         )
                     }
                     Text(
-                        text = "Параметры: ${station.parameters.joinToString(", ")}",
+                        text = stringResource(StringKey.Parameters, station.parameters.joinToString(", ")),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -260,15 +272,15 @@ private fun StationItem(
                     IconButton(onClick = onToggleFavorite) {
                         Icon(
                             imageVector = if (station.is_favorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                            contentDescription = if (station.is_favorite) "Убрать из избранного" else "Добавить в избранное",
+                            contentDescription = if (station.is_favorite) stringResource(StringKey.RemoveFromFavorites) else stringResource(StringKey.AddToFavorites),
                             tint = if (station.is_favorite) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                     IconButton(onClick = { showEditDialog = true }) {
-                        Icon(Icons.Default.Edit, contentDescription = "Редактировать")
+                        Icon(Icons.Default.Edit, contentDescription = stringResource(StringKey.EditStation))
                     }
                     IconButton(onClick = { showDeleteConfirmation = true }) {
-                        Icon(Icons.Default.Delete, contentDescription = "Удалить")
+                        Icon(Icons.Default.Delete, contentDescription = stringResource(StringKey.DeleteStation))
                     }
                 }
             }
@@ -291,8 +303,8 @@ private fun StationItem(
     if (showDeleteConfirmation) {
         AlertDialog(
             onDismissRequest = { showDeleteConfirmation = false },
-            title = { Text("Удалить станцию?") },
-            text = { Text("Вы уверены, что хотите удалить станцию \"${station.display_name}\"?") },
+            title = { Text(stringResource(StringKey.DeleteStationConfirmTitle)) },
+            text = { Text(stringResource(StringKey.DeleteStationConfirmMessage, station.display_name)) },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -300,12 +312,12 @@ private fun StationItem(
                         showDeleteConfirmation = false
                     }
                 ) {
-                    Text("Удалить")
+                    Text(stringResource(StringKey.Delete))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showDeleteConfirmation = false }) {
-                    Text("Отмена")
+                    Text(stringResource(StringKey.Cancel))
                 }
             }
         )
@@ -322,12 +334,12 @@ private fun EditStationDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Изменить название") },
+        title = { Text(stringResource(StringKey.EditStationTitle)) },
         text = {
             OutlinedTextField(
                 value = name,
                 onValueChange = { name = it },
-                label = { Text("Название станции") },
+                label = { Text(stringResource(StringKey.StationName)) },
                 singleLine = true
             )
         },
@@ -336,12 +348,12 @@ private fun EditStationDialog(
                 onClick = { onConfirm(name) },
                 enabled = name.isNotBlank()
             ) {
-                Text("Сохранить")
+                Text(stringResource(StringKey.Save))
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Отмена")
+                Text(stringResource(StringKey.Cancel))
             }
         }
     )

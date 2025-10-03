@@ -1,13 +1,14 @@
 package com.shestikpetr.meteo.ui.chart
 
-import android.util.Log
+import com.shestikpetr.meteo.common.logging.MeteoLogger
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.shestikpetr.meteo.network.SensorDataPoint
 import com.shestikpetr.meteo.repository.interfaces.SensorDataRepository
 import com.shestikpetr.meteo.model.ParameterConfig
 import com.shestikpetr.meteo.service.ParameterConfigService
-import com.shestikpetr.meteo.ui.Parameters
+import com.shestikpetr.meteo.localization.interfaces.LocalizationService
+import com.shestikpetr.meteo.localization.interfaces.StringKey
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -42,35 +43,15 @@ data class ChartUiState(
 @HiltViewModel
 class ChartViewModel @Inject constructor(
     private val sensorDataRepository: SensorDataRepository,
-    private val parameterConfigService: ParameterConfigService
+    private val parameterConfigService: ParameterConfigService,
+    private val localizationService: LocalizationService
 ) : ViewModel() {
+
+    private val logger = MeteoLogger.forClass(ChartViewModel::class)
 
     private val _uiState: MutableStateFlow<ChartUiState> = MutableStateFlow(ChartUiState())
     val uiState: StateFlow<ChartUiState> = _uiState.asStateFlow()
 
-    /**
-     * Helper function to convert ParameterConfig to legacy Parameters enum for compatibility.
-     * TODO: Remove this when all systems are updated to work with ParameterConfig directly.
-     */
-    private fun parameterConfigToLegacyEnum(parameterConfig: ParameterConfig?): Parameters? {
-        if (parameterConfig == null) return null
-
-        return when {
-            parameterConfig.name.lowercase().contains("температур") ||
-            parameterConfig.code.lowercase() == "t" ||
-            parameterConfig.code == "4402" -> Parameters.TEMPERATURE
-
-            parameterConfig.name.lowercase().contains("влажность") ||
-            parameterConfig.code.lowercase() == "h" ||
-            parameterConfig.code == "5402" -> Parameters.HUMIDITY
-
-            parameterConfig.name.lowercase().contains("давление") ||
-            parameterConfig.code.lowercase() == "p" ||
-            parameterConfig.code == "700" -> Parameters.PRESSURE
-
-            else -> null
-        }
-    }
 
     /**
      * Selects a parameter for display on the chart.
@@ -107,10 +88,10 @@ class ChartViewModel @Inject constructor(
                     )
                 }
 
-                Log.d("ChartViewModel", "Loaded ${stationConfig.parameters.size} available parameters for station $stationNumber")
+                logger.d("Loaded ${stationConfig.parameters.size} available parameters for station $stationNumber")
 
             } catch (e: Exception) {
-                Log.e("ChartViewModel", "Failed to load available parameters for station $stationNumber: ${e.message}")
+                logger.e("Failed to load available parameters for station $stationNumber: ${e.message}")
                 // Use fallback parameters
                 val fallbackConfig = parameterConfigService.globalParameterConfig.value
                 _uiState.update { currentState ->
@@ -143,18 +124,18 @@ class ChartViewModel @Inject constructor(
 
             val sensorData = try {
                 val parameterCode = selectedParameter?.code ?: run {
-                    Log.w("ChartViewModel", "No parameter selected, cannot fetch data")
+                    logger.w("No parameter selected, cannot fetch data")
                     _uiState.update { currentState ->
                         currentState.copy(
                             isLoadingSensorData = false,
-                            errorMessage = "Параметр не выбран"
+                            errorMessage = localizationService.getString(StringKey.ErrorNoParameterSelected)
                         )
                     }
                     return@launch
                 }
 
-                Log.d("ChartViewModel", "Fetching data for station: $stationNumber, parameter: $parameterCode")
-                Log.d("ChartViewModel", "Date range: ${dateRange.first} to ${dateRange.second}")
+                logger.d("Fetching data for station: $stationNumber, parameter: $parameterCode")
+                logger.d("Date range: ${dateRange.first} to ${dateRange.second}")
 
                 sensorDataRepository.getSensorData(
                     stationNumber = stationNumber,
@@ -162,11 +143,11 @@ class ChartViewModel @Inject constructor(
                     startTime = dateRange.first?.div(1000),
                     endTime = dateRange.second?.div(1000)
                 ).ifEmpty {
-                    Log.e("ChartViewModel", "Данные отсутствуют для выбранного периода")
+                    logger.e("Данные отсутствуют для выбранного периода")
                     emptyList()
                 }
             } catch (e: Exception) {
-                Log.e("ChartViewModel", "Error fetching sensor data: ${e.message}", e)
+                logger.e("Error fetching sensor data: ${e.message}", e)
 
                 _uiState.update { currentUiState ->
                     currentUiState.copy(
@@ -184,31 +165,10 @@ class ChartViewModel @Inject constructor(
                 )
             }
 
-            Log.d("ChartViewModel", "Loaded ${sensorData.size} data points for chart")
+            logger.d("Loaded ${sensorData.size} data points for chart")
         }
     }
 
-    /**
-     * Changes the selected parameter for chart display.
-     * This method provides backward compatibility with the legacy Parameters enum.
-     *
-     * @deprecated Use selectParameter(ParameterConfig) instead
-     * @param parameter The new parameter to display
-     */
-    @Deprecated("Use selectParameter(ParameterConfig) instead")
-    fun changeChartParameter(parameter: Parameters) {
-        Log.d("ChartViewModel", "Changing chart parameter to: $parameter (legacy)")
-
-        // Convert legacy parameter to ParameterConfig
-        val parameterConfig = _uiState.value.availableParameters.find { config ->
-            parameterConfigToLegacyEnum(config) == parameter
-        } ?: run {
-            Log.w("ChartViewModel", "Could not find ParameterConfig for legacy parameter: $parameter")
-            return
-        }
-
-        selectParameter(parameterConfig)
-    }
 
     /**
      * Changes the selected date range for chart data.
@@ -217,7 +177,7 @@ class ChartViewModel @Inject constructor(
      * @param dateRange The new date range (start timestamp, end timestamp) in milliseconds
      */
     fun changeDateRange(dateRange: Pair<Long?, Long?>) {
-        Log.d("ChartViewModel", "Changing date range to: ${dateRange.first} - ${dateRange.second}")
+        logger.d("Changing date range to: ${dateRange.first} - ${dateRange.second}")
 
         _uiState.update { currentUiState ->
             currentUiState.copy(
@@ -238,10 +198,10 @@ class ChartViewModel @Inject constructor(
      */
     fun refreshChartData() {
         _uiState.value.selectedStationId?.let { stationId ->
-            Log.d("ChartViewModel", "Refreshing chart data for station: $stationId")
+            logger.d("Refreshing chart data for station: $stationId")
             getSensorData(stationId)
         } ?: run {
-            Log.w("ChartViewModel", "Cannot refresh data - no station selected")
+            logger.w("Cannot refresh data - no station selected")
         }
     }
 
@@ -250,7 +210,7 @@ class ChartViewModel @Inject constructor(
      * Used when user logs out or switches accounts.
      */
     fun clearData() {
-        Log.d("ChartViewModel", "Clearing chart data")
+        logger.d("Clearing chart data")
 
         _uiState.update {
             ChartUiState() // Возвращаем к начальному состоянию
@@ -337,7 +297,7 @@ class ChartViewModel @Inject constructor(
             currentState.copy(sensorData = filteredData)
         }
 
-        Log.d("ChartViewModel", "Filtered data: ${currentData.size} -> ${filteredData.size} points")
+        logger.d("Filtered data: ${currentData.size} -> ${filteredData.size} points")
     }
 
     /**
