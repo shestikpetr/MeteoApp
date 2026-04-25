@@ -80,14 +80,14 @@ data class StationWithData(
     val customName: String?,
     val latitude: Double,
     val longitude: Double,
-    val parameterValue: String?, // null means "None" (parameter not available)
+    val parameterValue: Double?, // null means "None" (parameter not available)
     val unit: String?
 )
 
 data class StationParameterValue(
     val code: String,
     val name: String,
-    val value: String,
+    val value: Double,
     val unit: String?
 )
 

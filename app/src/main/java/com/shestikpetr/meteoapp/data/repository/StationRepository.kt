@@ -5,9 +5,6 @@ import com.shestikpetr.meteoapp.data.model.AddStationRequest
 import com.shestikpetr.meteoapp.data.model.ParameterHistoryResponse
 import com.shestikpetr.meteoapp.data.model.ParameterMetadata
 import com.shestikpetr.meteoapp.data.model.RenameStationRequest
-import com.shestikpetr.meteoapp.data.model.StationAllData
-import com.shestikpetr.meteoapp.data.model.StationParameterValue
-import com.shestikpetr.meteoapp.data.model.StationWithData
 import com.shestikpetr.meteoapp.data.model.UserStationResponse
 import com.shestikpetr.meteoapp.util.TokenManager
 
@@ -28,28 +25,6 @@ class StationRepository(private val tokenManager: TokenManager) {
             } else {
                 Result.failure(Exception(response.errorBody()?.string() ?: "Failed to load stations"))
             }
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-
-    suspend fun getAllParameters(stations: List<UserStationResponse>): Result<List<ParameterMetadata>> {
-        return try {
-            val allParameters = mutableMapOf<String, ParameterMetadata>()
-
-            for (station in stations) {
-                val stationNumber = station.station?.stationNumber ?: continue
-                val response = api.getStationParameters(getAuthHeader(), stationNumber)
-                if (response.isSuccessful && response.body() != null) {
-                    response.body()!!.parameters.forEach { param ->
-                        if (!allParameters.containsKey(param.code)) {
-                            allParameters[param.code] = param
-                        }
-                    }
-                }
-            }
-
-            Result.success(allParameters.values.toList())
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -118,73 +93,6 @@ class StationRepository(private val tokenManager: TokenManager) {
         } catch (e: Exception) {
             Result.failure(e)
         }
-    }
-
-    suspend fun getStationsWithData(
-        stations: List<UserStationResponse>,
-        selectedParameterCode: String?
-    ): List<StationWithData> {
-        return stations.mapNotNull { userStation ->
-            val station = userStation.station ?: return@mapNotNull null
-            val lat = station.latitude ?: return@mapNotNull null
-            val lon = station.longitude ?: return@mapNotNull null
-
-            var paramValue: String? = null
-            var unit: String? = null
-
-            if (selectedParameterCode != null) {
-                // Check if station has this parameter
-                val paramsResult = getStationParameters(station.stationNumber)
-                val hasParameter = paramsResult.getOrNull()?.any { it.code == selectedParameterCode } == true
-
-                if (hasParameter) {
-                    val dataResult = getLatestParameterValue(station.stationNumber, selectedParameterCode)
-                    dataResult.getOrNull()?.let { (value, paramUnit) ->
-                        paramValue = String.format("%.1f", value)
-                        unit = paramUnit
-                    }
-                }
-                // If station doesn't have parameter, paramValue stays null (will show "None")
-            }
-
-            StationWithData(
-                stationNumber = station.stationNumber,
-                name = station.name,
-                customName = userStation.customName,
-                latitude = lat,
-                longitude = lon,
-                parameterValue = paramValue,
-                unit = unit
-            )
-        }
-    }
-
-    suspend fun getStationAllData(stationWithData: StationWithData): StationAllData {
-        val parameters = mutableListOf<StationParameterValue>()
-
-        val paramsResult = getStationParameters(stationWithData.stationNumber)
-        paramsResult.getOrNull()?.forEach { param ->
-            val dataResult = getLatestParameterValue(stationWithData.stationNumber, param.code)
-            dataResult.getOrNull()?.let { (value, unit) ->
-                parameters.add(
-                    StationParameterValue(
-                        code = param.code,
-                        name = param.name,
-                        value = String.format("%.1f", value),
-                        unit = unit
-                    )
-                )
-            }
-        }
-
-        return StationAllData(
-            stationNumber = stationWithData.stationNumber,
-            name = stationWithData.name,
-            customName = stationWithData.customName,
-            latitude = stationWithData.latitude,
-            longitude = stationWithData.longitude,
-            parameters = parameters
-        )
     }
 
     suspend fun addStation(stationNumber: String): Result<UserStationResponse> {

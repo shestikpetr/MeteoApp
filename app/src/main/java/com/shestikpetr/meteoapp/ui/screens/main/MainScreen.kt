@@ -1,13 +1,7 @@
 package com.shestikpetr.meteoapp.ui.screens.main
 
 import android.Manifest
-import android.annotation.SuppressLint
 import android.content.pm.PackageManager
-import android.graphics.Color
-
-import android.graphics.drawable.GradientDrawable
-import android.view.Gravity
-import android.widget.TextView
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -35,22 +29,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ShowChart
-import androidx.compose.material.icons.filled.Air
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Cloud
-import androidx.compose.material.icons.filled.Compress
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.MyLocation
-import androidx.compose.material.icons.filled.Opacity
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Thermostat
-import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.WaterDrop
-import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material3.BottomSheetScaffold
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -84,7 +70,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 
 import androidx.compose.ui.text.font.FontWeight
@@ -94,25 +79,26 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
-import com.google.android.gms.location.LocationServices
 import com.shestikpetr.meteoapp.data.model.ParameterMetadata
 import com.shestikpetr.meteoapp.data.model.StationAllData
 import com.shestikpetr.meteoapp.data.model.StationWithData
 import com.shestikpetr.meteoapp.data.model.UserStationResponse
+import com.shestikpetr.meteoapp.data.repository.StationDataAggregator
 import com.shestikpetr.meteoapp.data.repository.StationRepository
+import com.shestikpetr.meteoapp.ui.map.MapMarkerRenderer
 import com.shestikpetr.meteoapp.ui.theme.SkyBlue40
 import com.shestikpetr.meteoapp.ui.theme.SkyBlue80
 import com.shestikpetr.meteoapp.ui.theme.SkyBlueDark
+import com.shestikpetr.meteoapp.ui.util.formatParameterValue
+import com.shestikpetr.meteoapp.ui.util.getParameterIcon
+import com.shestikpetr.meteoapp.util.LocationProvider
 import com.shestikpetr.meteoapp.util.SettingsManager
 import com.shestikpetr.meteoapp.util.TokenManager
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.tasks.await
 import androidx.compose.ui.graphics.Color as ComposeColor
-import androidx.core.graphics.toColorInt
-import androidx.lifecycle.compose.LocalLifecycleOwner
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -124,7 +110,9 @@ fun MainScreen(
     val context = LocalContext.current
     val tokenManager = remember { TokenManager(context) }
     val stationRepository = remember { StationRepository(tokenManager) }
+    val stationDataAggregator = remember { StationDataAggregator(stationRepository) }
     val settingsManager = remember { SettingsManager(context) }
+    val locationProvider = remember { LocationProvider(context) }
     val scope = rememberCoroutineScope()
 
     val hiddenStations by settingsManager.hiddenStations.collectAsState(initial = emptySet())
@@ -152,7 +140,7 @@ fun MainScreen(
         val coarseGranted = permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
         if (fineGranted || coarseGranted) {
             scope.launch {
-                getUserLocation(context)?.let { userLocation = it }
+                locationProvider.getLastKnownLocation()?.let { userLocation = it }
             }
         }
     }
@@ -167,7 +155,7 @@ fun MainScreen(
         ) == PackageManager.PERMISSION_GRANTED
 
         if (hasFinePermission || hasCoarsePermission) {
-            getUserLocation(context)?.let { userLocation = it }
+            locationProvider.getLastKnownLocation()?.let { userLocation = it }
         } else {
             locationPermissionLauncher.launch(
                 arrayOf(
@@ -184,11 +172,11 @@ fun MainScreen(
         val stationsResult = stationRepository.getUserStations()
         stationsResult.getOrNull()?.let { loadedStations ->
             stations = loadedStations
-            val paramsResult = stationRepository.getAllParameters(loadedStations)
+            val paramsResult = stationDataAggregator.getAllParameters(loadedStations)
             paramsResult.getOrNull()?.let { params ->
                 allParameters = params
             }
-            stationsWithData = stationRepository.getStationsWithData(loadedStations, null)
+            stationsWithData = stationDataAggregator.getStationsWithData(loadedStations, null)
         }
         isLoading = false
     }
@@ -197,7 +185,7 @@ fun MainScreen(
     LaunchedEffect(selectedParameter) {
         if (stations.isNotEmpty()) {
             isRefreshing = true
-            stationsWithData = stationRepository.getStationsWithData(stations, selectedParameter?.code)
+            stationsWithData = stationDataAggregator.getStationsWithData(stations, selectedParameter?.code)
             isRefreshing = false
         }
     }
@@ -235,7 +223,7 @@ fun MainScreen(
                     focusedStation = station
                     scope.launch {
                         isLoadingStationData = true
-                        selectedStationData = stationRepository.getStationAllData(station)
+                        selectedStationData = stationDataAggregator.getStationAllData(station)
                         isLoadingStationData = false
                     }
                 },
@@ -266,7 +254,7 @@ fun MainScreen(
                         } else {
                             scope.launch {
                                 isLoadingStationData = true
-                                selectedStationData = stationRepository.getStationAllData(station)
+                                selectedStationData = stationDataAggregator.getStationAllData(station)
                                 isLoadingStationData = false
                             }
                         }
@@ -323,13 +311,13 @@ fun MainScreen(
                             stations = loadedStations
 
                             // 2. Проходимся по каждой станции и обновляем параметры
-                            val paramsResult = stationRepository.getAllParameters(loadedStations)
+                            val paramsResult = stationDataAggregator.getAllParameters(loadedStations)
                             paramsResult.getOrNull()?.let { params ->
                                 allParameters = params
                             }
 
                             // 3. Обновляем данные станций на карте
-                            stationsWithData = stationRepository.getStationsWithData(
+                            stationsWithData = stationDataAggregator.getStationsWithData(
                                 loadedStations,
                                 selectedParameter?.code
                             )
@@ -339,10 +327,10 @@ fun MainScreen(
                                 val updatedStation = stationsWithData.find {
                                     it.stationNumber == currentData.stationNumber
                                 }
-                                if (updatedStation != null) {
-                                    selectedStationData = stationRepository.getStationAllData(updatedStation)
+                                selectedStationData = if (updatedStation != null) {
+                                    stationDataAggregator.getStationAllData(updatedStation)
                                 } else {
-                                    selectedStationData = null
+                                    null
                                 }
                             }
                         } finally {
@@ -416,17 +404,6 @@ fun MainScreen(
                 }
             }
         }
-    }
-}
-
-@SuppressLint("MissingPermission")
-private suspend fun getUserLocation(context: android.content.Context): GeoPoint? {
-    return try {
-        val fusedLocationClient = LocationServices.getFusedLocationProviderClient(context)
-        val location = fusedLocationClient.lastLocation.await()
-        location?.let { GeoPoint(it.latitude, it.longitude) }
-    } catch (e: Exception) {
-        null
     }
 }
 
@@ -594,7 +571,7 @@ private fun ParameterValueItem(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "${param.value} ${param.unit ?: ""}",
+                    text = "${param.value.formatParameterValue()} ${param.unit ?: ""}",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = SkyBlueDark
@@ -632,6 +609,7 @@ private fun OsmMapView(
             setBuiltInZoomControls(false)
         }
     }
+    val markerRenderer = remember { MapMarkerRenderer(context) }
 
     // Set initial camera position only once
     LaunchedEffect(userLocation, stations) {
@@ -667,10 +645,9 @@ private fun OsmMapView(
             val point = GeoPoint(station.latitude, station.longitude)
 
             val hasData = station.parameterValue != null || selectedParameter == null
-            val bgColor = if (hasData) "#1976D2".toColorInt() else "#78909C".toColorInt()
 
             val displayText = if (selectedParameter != null) {
-                val value = station.parameterValue ?: "—"
+                val value = station.parameterValue?.formatParameterValue() ?: "—"
                 if (station.unit != null && station.parameterValue != null) {
                     "$value ${station.unit}"
                 } else {
@@ -680,39 +657,9 @@ private fun OsmMapView(
                 station.customName ?: station.name
             }
 
-            val markerView = TextView(context).apply {
-                text = displayText
-                textSize = 13f
-                setTextColor(Color.WHITE)
-                gravity = Gravity.CENTER
-                maxLines = 1
-                typeface = android.graphics.Typeface.DEFAULT_BOLD
-                setPadding(32, 20, 32, 20)
-                background = GradientDrawable().apply {
-                    shape = GradientDrawable.RECTANGLE
-                    cornerRadius = 32f
-                    setColor(bgColor)
-                }
-            }
-
-            // Measure the view
-            markerView.measure(
-                android.view.View.MeasureSpec.makeMeasureSpec(0, android.view.View.MeasureSpec.UNSPECIFIED),
-                android.view.View.MeasureSpec.makeMeasureSpec(0, android.view.View.MeasureSpec.UNSPECIFIED)
-            )
-            markerView.layout(0, 0, markerView.measuredWidth, markerView.measuredHeight)
-
-            // Convert view to bitmap for marker icon
-            val bitmap = android.graphics.Bitmap.createBitmap(
-                markerView.measuredWidth, markerView.measuredHeight,
-                android.graphics.Bitmap.Config.ARGB_8888
-            )
-            val canvas = android.graphics.Canvas(bitmap)
-            markerView.draw(canvas)
-
             val marker = Marker(mapView).apply {
                 position = point
-                icon = android.graphics.drawable.BitmapDrawable(context.resources, bitmap)
+                icon = markerRenderer.render(displayText, hasData)
                 setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
                 setOnMarkerClickListener { _, _ ->
                     onStationClick(station)
@@ -925,7 +872,7 @@ private fun StationItem(
                     color = SkyBlue40
                 ) {
                     Text(
-                        text = "${station.parameterValue} ${station.unit ?: ""}",
+                        text = "${station.parameterValue.formatParameterValue()} ${station.unit ?: ""}",
                         style = MaterialTheme.typography.labelMedium,
                         color = ComposeColor.White,
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
@@ -1015,16 +962,3 @@ private fun ParameterItem(
     }
 }
 
-private fun getParameterIcon(code: String): ImageVector {
-    return when {
-        code.contains("temp", ignoreCase = true) -> Icons.Default.Thermostat
-        code.contains("humid", ignoreCase = true) -> Icons.Default.WaterDrop
-        code.contains("pressure", ignoreCase = true) || code.contains("press", ignoreCase = true) -> Icons.Default.Compress
-        code.contains("wind", ignoreCase = true) -> Icons.Default.Air
-        code.contains("rain", ignoreCase = true) || code.contains("precip", ignoreCase = true) -> Icons.Default.Opacity
-        code.contains("sun", ignoreCase = true) || code.contains("solar", ignoreCase = true) -> Icons.Default.WbSunny
-        code.contains("cloud", ignoreCase = true) -> Icons.Default.Cloud
-        code.contains("vis", ignoreCase = true) -> Icons.Default.Visibility
-        else -> Icons.AutoMirrored.Filled.ShowChart
-    }
-}

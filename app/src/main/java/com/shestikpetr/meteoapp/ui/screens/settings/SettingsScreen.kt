@@ -73,6 +73,7 @@ import androidx.compose.ui.unit.dp
 import com.shestikpetr.meteoapp.data.model.ParameterMetadata
 import com.shestikpetr.meteoapp.data.model.UserStationResponse
 import com.shestikpetr.meteoapp.data.repository.AuthRepository
+import com.shestikpetr.meteoapp.data.repository.StationDataAggregator
 import com.shestikpetr.meteoapp.data.repository.StationRepository
 import com.shestikpetr.meteoapp.ui.theme.SkyBlue40
 import com.shestikpetr.meteoapp.ui.theme.SkyBlue80
@@ -91,6 +92,7 @@ fun SettingsScreen(
     val tokenManager = remember { TokenManager(context) }
     val authRepository = remember { AuthRepository(tokenManager) }
     val stationRepository = remember { StationRepository(tokenManager) }
+    val stationDataAggregator = remember { StationDataAggregator(stationRepository) }
     val settingsManager = remember { SettingsManager(context) }
     val scope = rememberCoroutineScope()
 
@@ -114,7 +116,7 @@ fun SettingsScreen(
             isLoading = true
             stationRepository.getUserStations().getOrNull()?.let { loaded ->
                 stations = loaded
-                stationRepository.getAllParameters(loaded).getOrNull()?.let { params ->
+                stationDataAggregator.getAllParameters(loaded).getOrNull()?.let { params ->
                     allParameters = params
                 }
             }
