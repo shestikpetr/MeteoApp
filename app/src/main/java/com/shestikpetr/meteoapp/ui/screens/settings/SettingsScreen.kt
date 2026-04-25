@@ -79,7 +79,8 @@ import com.shestikpetr.meteoapp.ui.theme.SkyBlue40
 import com.shestikpetr.meteoapp.ui.theme.SkyBlue80
 import com.shestikpetr.meteoapp.util.SettingsManager
 import com.shestikpetr.meteoapp.util.ThemeMode
-import com.shestikpetr.meteoapp.util.TokenManager
+import com.shestikpetr.meteoapp.util.TokenStore
+import com.shestikpetr.meteoapp.util.UserSessionStore
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -89,9 +90,10 @@ fun SettingsScreen(
     onLogout: () -> Unit
 ) {
     val context = LocalContext.current
-    val tokenManager = remember { TokenManager(context) }
-    val authRepository = remember { AuthRepository(tokenManager) }
-    val stationRepository = remember { StationRepository(tokenManager) }
+    val tokenStore = remember { TokenStore(context) }
+    val userSessionStore = remember { UserSessionStore(context) }
+    val authRepository = remember { AuthRepository(tokenStore, userSessionStore) }
+    val stationRepository = remember { StationRepository(tokenStore) }
     val stationDataAggregator = remember { StationDataAggregator(stationRepository) }
     val settingsManager = remember { SettingsManager(context) }
     val scope = rememberCoroutineScope()
@@ -100,7 +102,7 @@ fun SettingsScreen(
     val tooltipsEnabled by settingsManager.tooltipsEnabled.collectAsState(initial = true)
     val hiddenStations by settingsManager.hiddenStations.collectAsState(initial = emptySet())
     val hiddenParameters by settingsManager.hiddenParameters.collectAsState(initial = emptySet())
-    val username by tokenManager.username.collectAsState(initial = null)
+    val username by userSessionStore.username.collectAsState(initial = null)
 
     var stations by remember { mutableStateOf<List<UserStationResponse>>(emptyList()) }
     var allParameters by remember { mutableStateOf<List<ParameterMetadata>>(emptyList()) }
@@ -549,102 +551,6 @@ fun SettingsScreen(
             Spacer(modifier = Modifier.height(16.dp))
         }
     }
-}
-
-@Composable
-private fun AddStationDialog(
-    onDismiss: () -> Unit,
-    onConfirm: (String) -> Unit
-) {
-    var stationNumber by remember { mutableStateOf("") }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Добавить станцию") },
-        text = {
-            OutlinedTextField(
-                value = stationNumber,
-                onValueChange = { stationNumber = it },
-                label = { Text("Номер станции") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth()
-            )
-        },
-        confirmButton = {
-            TextButton(
-                onClick = { onConfirm(stationNumber.trim()) },
-                enabled = stationNumber.isNotBlank()
-            ) {
-                Text("Добавить", color = SkyBlue40)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Отмена")
-            }
-        }
-    )
-}
-
-@Composable
-private fun DeleteStationDialog(
-    stationName: String,
-    onDismiss: () -> Unit,
-    onConfirm: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Удалить станцию") },
-        text = {
-            Text("Удалить станцию \"$stationName\"? Это действие нельзя отменить.")
-        },
-        confirmButton = {
-            TextButton(onClick = onConfirm) {
-                Text("Удалить", color = MaterialTheme.colorScheme.error)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Отмена")
-            }
-        }
-    )
-}
-
-@Composable
-private fun RenameStationDialog(
-    currentName: String,
-    onDismiss: () -> Unit,
-    onConfirm: (String) -> Unit
-) {
-    var newName by remember { mutableStateOf(currentName) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Переименовать станцию") },
-        text = {
-            OutlinedTextField(
-                value = newName,
-                onValueChange = { newName = it },
-                label = { Text("Новое имя") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth()
-            )
-        },
-        confirmButton = {
-            TextButton(
-                onClick = { onConfirm(newName.trim()) },
-                enabled = newName.isNotBlank()
-            ) {
-                Text("Сохранить", color = SkyBlue40)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Отмена")
-            }
-        }
-    )
 }
 
 @Composable

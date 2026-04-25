@@ -1,6 +1,6 @@
 package com.shestikpetr.meteoapp.data.api
 
-import com.shestikpetr.meteoapp.util.TokenManager
+import com.shestikpetr.meteoapp.util.TokenStore
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
@@ -13,9 +13,9 @@ object RetrofitClient {
 
     private var _apiService: ApiService? = null
 
-    fun init(tokenManager: TokenManager) {
-        val tokenRefresher = TokenRefresher(BASE_URL, tokenManager)
-        val authenticator = TokenAuthenticator(tokenManager, tokenRefresher)
+    fun init(tokenStore: TokenStore) {
+        val tokenRefresher = TokenRefresher(BASE_URL, tokenStore)
+        val authenticator = TokenAuthenticator(tokenStore, tokenRefresher)
 
         val loggingInterceptor = HttpLoggingInterceptor().apply {
             level = HttpLoggingInterceptor.Level.BODY

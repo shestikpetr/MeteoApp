@@ -6,14 +6,14 @@ import com.shestikpetr.meteoapp.data.model.ParameterHistoryResponse
 import com.shestikpetr.meteoapp.data.model.ParameterMetadata
 import com.shestikpetr.meteoapp.data.model.RenameStationRequest
 import com.shestikpetr.meteoapp.data.model.UserStationResponse
-import com.shestikpetr.meteoapp.util.TokenManager
+import com.shestikpetr.meteoapp.util.TokenStore
 
-class StationRepository(private val tokenManager: TokenManager) {
+class StationRepository(private val tokenStore: TokenStore) {
 
     private val api = RetrofitClient.apiService
 
     private suspend fun getAuthHeader(): String {
-        val token = tokenManager.getAccessToken() ?: ""
+        val token = tokenStore.getAccessToken() ?: ""
         return "Bearer $token"
     }
 

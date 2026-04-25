@@ -2,7 +2,7 @@ package com.shestikpetr.meteoapp.data.api
 
 import com.google.gson.Gson
 import com.shestikpetr.meteoapp.data.model.RefreshTokenResponse
-import com.shestikpetr.meteoapp.util.TokenManager
+import com.shestikpetr.meteoapp.util.TokenStore
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -11,7 +11,7 @@ import java.util.concurrent.TimeUnit
 
 class TokenRefresher(
     private val baseUrl: String,
-    private val tokenManager: TokenManager
+    private val tokenStore: TokenStore
 ) {
     private val client = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
@@ -19,7 +19,7 @@ class TokenRefresher(
         .build()
 
     suspend fun refresh(): String? {
-        val refreshToken = tokenManager.getRefreshToken() ?: return null
+        val refreshToken = tokenStore.getRefreshToken() ?: return null
         return try {
             val request = Request.Builder()
                 .url("${baseUrl}api/v1/auth/refresh")
@@ -31,7 +31,7 @@ class TokenRefresher(
             if (response.isSuccessful) {
                 val body = response.body?.string()
                 val tokenResponse = Gson().fromJson(body, RefreshTokenResponse::class.java)
-                tokenManager.updateAccessToken(tokenResponse.accessToken)
+                tokenStore.updateAccessToken(tokenResponse.accessToken)
                 tokenResponse.accessToken
             } else {
                 null

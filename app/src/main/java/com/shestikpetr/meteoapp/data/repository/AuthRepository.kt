@@ -1,71 +1,48 @@
 package com.shestikpetr.meteoapp.data.repository
 
 import com.shestikpetr.meteoapp.data.api.RetrofitClient
+import com.shestikpetr.meteoapp.data.model.AuthResponse
 import com.shestikpetr.meteoapp.data.model.UserLoginRequest
 import com.shestikpetr.meteoapp.data.model.UserRegisterRequest
-import com.shestikpetr.meteoapp.util.TokenManager
+import com.shestikpetr.meteoapp.util.TokenStore
+import com.shestikpetr.meteoapp.util.UserSessionStore
+import retrofit2.Response
 
-sealed class AuthResult {
-    data class Success(val username: String) : AuthResult()
-    data class Error(val message: String) : AuthResult()
-}
-
-class AuthRepository(private val tokenManager: TokenManager) {
-
+class AuthRepository(
+    private val tokenStore: TokenStore,
+    private val userSessionStore: UserSessionStore
+) {
     private val api = RetrofitClient.apiService
 
-    suspend fun login(username: String, password: String): AuthResult {
-        return try {
-            val response = api.login(UserLoginRequest(username, password))
-            if (response.isSuccessful && response.body() != null) {
-                val authData = response.body()!!.data
-                tokenManager.saveTokens(
-                    accessToken = authData.accessToken,
-                    refreshToken = authData.refreshToken,
-                    userId = authData.userId,
-                    username = authData.username
-                )
-                AuthResult.Success(authData.username)
-            } else {
-                val errorBody = response.errorBody()?.string()
-                AuthResult.Error(errorBody ?: "Login failed")
-            }
-        } catch (e: Exception) {
-            AuthResult.Error(e.message ?: "Network error")
-        }
+    suspend fun login(username: String, password: String): AuthResult = try {
+        handleAuthResponse(api.login(UserLoginRequest(username, password)))
+    } catch (e: Exception) {
+        AuthResult.Error(e.message ?: "Network error")
     }
 
-    suspend fun register(username: String, email: String, password: String): AuthResult {
-        return try {
-            val response = api.register(UserRegisterRequest(username, email, password))
-            if (response.isSuccessful && response.body() != null) {
-                val authData = response.body()!!.data
-                tokenManager.saveTokens(
-                    accessToken = authData.accessToken,
-                    refreshToken = authData.refreshToken,
-                    userId = authData.userId,
-                    username = authData.username
-                )
-                AuthResult.Success(authData.username)
-            } else {
-                val errorBody = response.errorBody()?.string()
-                AuthResult.Error(errorBody ?: "Registration failed")
-            }
-        } catch (e: Exception) {
-            AuthResult.Error(e.message ?: "Network error")
-        }
+    suspend fun register(username: String, email: String, password: String): AuthResult = try {
+        handleAuthResponse(api.register(UserRegisterRequest(username, email, password)))
+    } catch (e: Exception) {
+        AuthResult.Error(e.message ?: "Network error")
     }
 
     suspend fun logout() {
-        try {
-            api.logout()
-        } catch (_: Exception) {
-            // Ignore network errors on logout
-        }
-        tokenManager.clearTokens()
+        runCatching { api.logout() }
+        tokenStore.clear()
+        userSessionStore.clear()
     }
 
-    suspend fun isLoggedIn(): Boolean {
-        return tokenManager.isLoggedIn()
+    suspend fun isLoggedIn(): Boolean = tokenStore.isLoggedIn()
+
+    private suspend fun handleAuthResponse(response: Response<AuthResponse>): AuthResult {
+        val body = response.body()
+        if (!response.isSuccessful || body == null) {
+            val errorBody = response.errorBody()?.string()
+            return AuthResult.Error(errorBody ?: "Authentication failed")
+        }
+        val data = body.data
+        tokenStore.saveTokens(data.accessToken, data.refreshToken)
+        userSessionStore.save(data.userId, data.username)
+        return AuthResult.Success(data.username)
     }
 }

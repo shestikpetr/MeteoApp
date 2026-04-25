@@ -1,6 +1,6 @@
 package com.shestikpetr.meteoapp.data.api
 
-import com.shestikpetr.meteoapp.util.TokenManager
+import com.shestikpetr.meteoapp.util.TokenStore
 import kotlinx.coroutines.runBlocking
 import okhttp3.Authenticator
 import okhttp3.Request
@@ -8,7 +8,7 @@ import okhttp3.Response
 import okhttp3.Route
 
 class TokenAuthenticator(
-    private val tokenManager: TokenManager,
+    private val tokenStore: TokenStore,
     private val tokenRefresher: TokenRefresher
 ) : Authenticator {
 
@@ -18,7 +18,7 @@ class TokenAuthenticator(
         if (response.priorResponse != null) return null
 
         synchronized(lock) {
-            val currentToken = runBlocking { tokenManager.getAccessToken() }
+            val currentToken = runBlocking { tokenStore.getAccessToken() }
             val requestToken = response.request.header("Authorization")
                 ?.removePrefix("Bearer ")
 

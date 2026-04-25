@@ -71,7 +71,8 @@ import com.shestikpetr.meteoapp.data.repository.AuthResult
 import com.shestikpetr.meteoapp.ui.theme.SkyBlue40
 import com.shestikpetr.meteoapp.ui.theme.SkyBlue80
 import com.shestikpetr.meteoapp.ui.theme.SkyBlueDark
-import com.shestikpetr.meteoapp.util.TokenManager
+import com.shestikpetr.meteoapp.util.TokenStore
+import com.shestikpetr.meteoapp.util.UserSessionStore
 import kotlinx.coroutines.launch
 
 @Composable
@@ -79,8 +80,9 @@ fun AuthScreen(
     onAuthSuccess: () -> Unit
 ) {
     val context = LocalContext.current
-    val tokenManager = remember { TokenManager(context) }
-    val authRepository = remember { AuthRepository(tokenManager) }
+    val tokenStore = remember { TokenStore(context) }
+    val userSessionStore = remember { UserSessionStore(context) }
+    val authRepository = remember { AuthRepository(tokenStore, userSessionStore) }
     val scope = rememberCoroutineScope()
     val focusManager = LocalFocusManager.current
     val scrollState = rememberScrollState()
@@ -95,9 +97,12 @@ fun AuthScreen(
 
     var focusedFieldIndex by remember { mutableIntStateOf(-1) }
 
-    val isEmailValid = email.isEmpty() || android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()
-    val isFormValid = username.isNotBlank() && password.length >= 6 &&
-            (selectedTab == 0 || (email.isNotBlank() && isEmailValid))
+    val isEmailValid = AuthFormValidator.isEmailValid(email)
+    val isFormValid = if (selectedTab == 0) {
+        AuthFormValidator.isLoginFormValid(username, password)
+    } else {
+        AuthFormValidator.isRegisterFormValid(username, email, password)
+    }
 
     // Auto-scroll when field is focused
     LaunchedEffect(focusedFieldIndex) {
