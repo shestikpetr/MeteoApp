@@ -224,11 +224,22 @@ fun SettingsScreen(
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis
                                         )
-                                        param.unit?.let { unit ->
+                                        param.description?.takeIf { it.isNotBlank() }?.let { desc ->
+                                            Text(
+                                                text = desc,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = palette.ink3,
+                                                maxLines = 2,
+                                                overflow = TextOverflow.Ellipsis,
+                                                modifier = Modifier.padding(top = 1.dp)
+                                            )
+                                        }
+                                        param.unit?.takeIf { it.isNotBlank() }?.let { unit ->
                                             Text(
                                                 text = unit,
                                                 style = MeteoTextStyles.MonoSmall,
-                                                color = palette.ink4
+                                                color = palette.ink4,
+                                                modifier = Modifier.padding(top = 1.dp)
                                             )
                                         }
                                     }

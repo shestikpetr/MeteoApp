@@ -348,13 +348,28 @@ private fun ParametersTab(
                                 Text(
                                     text = param.name.uppercase(),
                                     style = com.shestikpetr.meteoapp.ui.theme.MeteoTextStyles.Label,
-                                    color = palette.ink4
+                                    color = palette.ink4,
+                                    maxLines = 1,
+                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                                 )
-                                Text(
-                                    text = param.unit ?: "",
-                                    style = com.shestikpetr.meteoapp.ui.theme.MeteoTextStyles.MonoSmall,
-                                    color = palette.ink3
-                                )
+                                param.description?.takeIf { it.isNotBlank() }?.let { desc ->
+                                    Text(
+                                        text = desc,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = palette.ink3,
+                                        maxLines = 2,
+                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                        modifier = Modifier.padding(top = 2.dp)
+                                    )
+                                }
+                                param.unit?.takeIf { it.isNotBlank() }?.let { unit ->
+                                    Text(
+                                        text = unit,
+                                        style = com.shestikpetr.meteoapp.ui.theme.MeteoTextStyles.MonoSmall,
+                                        color = palette.ink4,
+                                        modifier = Modifier.padding(top = 2.dp)
+                                    )
+                                }
                             }
                         }
                     }

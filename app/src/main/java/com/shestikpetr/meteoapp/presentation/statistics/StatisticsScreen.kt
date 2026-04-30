@@ -294,7 +294,8 @@ private fun ParametersSelector(
                             onClick = { onToggle(param) },
                             index = idx,
                             swatchColor = idx?.let { PARAM_PALETTE[it % PARAM_PALETTE.size] },
-                            desc = param.unit,
+                            desc = param.description?.takeIf { it.isNotBlank() },
+                            sub = param.unit?.takeIf { it.isNotBlank() },
                             isPrimary = idx == 0,
                             modifier = Modifier.fillMaxWidth()
                         )
