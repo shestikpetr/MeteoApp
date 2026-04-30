@@ -18,8 +18,10 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
@@ -101,6 +103,7 @@ fun StatisticsScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .verticalScroll(scroll)
+                    .navigationBarsPadding()
                     .padding(horizontal = 20.dp, vertical = 18.dp)
                     .widthIn(max = 880.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -166,11 +169,15 @@ fun StatisticsScreen(
 @Composable
 private fun StatsTopBar(onNavigateBack: () -> Unit) {
     val palette = MaterialTheme.appColors
-    Column {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(palette.bgElev)
+            .statusBarsPadding()
+    ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(palette.bgElev)
                 .padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)
