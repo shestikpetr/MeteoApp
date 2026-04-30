@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -54,13 +56,21 @@ fun DetailPanel(
     modifier: Modifier = Modifier
 ) {
     val palette = MaterialTheme.appColors
+    val scroll = androidx.compose.foundation.rememberScrollState()
     Surface(
         modifier = modifier.fillMaxWidth(),
         color = palette.bgElev,
         shape = RoundedCornerShape(12.dp),
         border = BorderStroke(1.dp, palette.line)
     ) {
-        Column {
+        // Высота карточки ограничена примерно половиной экрана, чтобы при большом
+        // количестве параметров содержимое скроллилось, а не прижимало низ карты.
+        val maxHeight = androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp.dp * 0.6f
+        Column(
+            modifier = Modifier
+                .heightIn(max = maxHeight)
+                .verticalScroll(scroll)
+        ) {
             // Box с fillMaxWidth, чтобы Alignment.TopEnd прижимал крестик к правому
             // краю карточки, а не к правому краю внутреннего Column.
             Box(modifier = Modifier.fillMaxWidth()) {

@@ -10,6 +10,8 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,6 +30,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ShowChart
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.BottomSheetScaffold
@@ -50,6 +54,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -320,16 +325,35 @@ private fun ParametersTab(
     onParameterSelected: (com.shestikpetr.meteoapp.domain.model.ParameterMeta?) -> Unit
 ) {
     val palette = MaterialTheme.appColors
-    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 4.dp)) {
+    val scroll = rememberScrollState()
+
+    // Параметры с одинаковым name группируем — на станции может быть несколько
+    // датчиков «Температура» (воздух, грунт, вода). Внутри группы сохраняем
+    // исходный порядок, между группами — порядок появления первого элемента.
+    val groups: List<List<com.shestikpetr.meteoapp.domain.model.ParameterMeta>> = remember(state.allParameters) {
+        val byName = LinkedHashMap<String, MutableList<com.shestikpetr.meteoapp.domain.model.ParameterMeta>>()
+        state.allParameters.forEach { p ->
+            byName.getOrPut(p.name) { mutableListOf() }.add(p)
+        }
+        byName.values.toList()
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            // Bottom sheet с verticalScroll позволяет скроллить контент,
+            // когда параметров больше, чем умещается в полностью раскрытой шторке.
+            .verticalScroll(scroll)
+            .padding(horizontal = 14.dp, vertical = 4.dp)
+    ) {
         Text(
-            text = state.selectedParameter?.let { "Выбран: ${it.name}" }
+            text = state.selectedParameter?.let { "Выбран: ${it.name}${it.unit?.let { u -> " · $u" } ?: ""}" }
                 ?: "Выберите параметр для отображения на карте",
             style = MaterialTheme.typography.bodySmall,
             color = if (state.selectedParameter != null) palette.ink else palette.ink3
         )
         Spacer(Modifier.size(8.dp))
 
-        // Параметры идут плиткой
         if (state.allParameters.isEmpty()) {
             Text(
                 text = "Нет параметров",
@@ -337,47 +361,152 @@ private fun ParametersTab(
                 color = palette.ink3,
                 modifier = Modifier.padding(vertical = 12.dp)
             )
-        } else {
-            // Плитки на главной — это просто фильтр карты, описание здесь не нужно
-            // (его всё равно видно в DetailPanel при клике на станцию и в Настройках).
-            // Поэтому плитка минимальной высоты: name + unit в одну строку.
-            state.allParameters.chunked(2).forEach { row ->
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    row.forEach { param ->
-                        val isSelected = state.selectedParameter?.code == param.code
-                        Surface(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clip(RoundedCornerShape(6.dp))
-                                .clickable {
-                                    onParameterSelected(if (isSelected) null else param)
-                                },
-                            color = if (isSelected) palette.bgSunken else palette.bgElev,
-                            border = androidx.compose.foundation.BorderStroke(
-                                1.dp,
-                                if (isSelected) palette.line2 else palette.line
-                            ),
-                            shape = RoundedCornerShape(6.dp)
-                        ) {
+            return@Column
+        }
+
+        groups.forEach { group ->
+            ParameterGroupItem(
+                group = group,
+                selected = state.selectedParameter,
+                onSelect = onParameterSelected
+            )
+            Spacer(Modifier.size(6.dp))
+        }
+    }
+}
+
+/**
+ * Один элемент списка параметров. Если в группе один параметр — это обычная
+ * плитка-фильтр. Если несколько (например, разные датчики температуры) — это
+ * раскрывающийся список с теми же сабтайтлами.
+ */
+@Composable
+private fun ParameterGroupItem(
+    group: List<com.shestikpetr.meteoapp.domain.model.ParameterMeta>,
+    selected: com.shestikpetr.meteoapp.domain.model.ParameterMeta?,
+    onSelect: (com.shestikpetr.meteoapp.domain.model.ParameterMeta?) -> Unit
+) {
+    val palette = MaterialTheme.appColors
+    val isGroup = group.size > 1
+    val anySelectedInGroup = group.any { it.code == selected?.code }
+    val first = group.first()
+    var expanded by rememberSaveable(first.name) { mutableStateOf(false) }
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(6.dp))
+            .clickable {
+                if (isGroup) {
+                    expanded = !expanded
+                } else {
+                    val same = selected?.code == first.code
+                    onSelect(if (same) null else first)
+                }
+            },
+        color = if (anySelectedInGroup) palette.bgSunken else palette.bgElev,
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp,
+            if (anySelectedInGroup) palette.line2 else palette.line
+        ),
+        shape = RoundedCornerShape(6.dp)
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = first.name,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = palette.ink,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+                Spacer(Modifier.size(6.dp))
+                if (isGroup) {
+                    // Бейдж с количеством датчиков и стрелка раскрытия
+                    Text(
+                        text = "${group.size}",
+                        style = com.shestikpetr.meteoapp.ui.theme.MeteoTextStyles.MonoSmall,
+                        color = palette.ink4
+                    )
+                    Spacer(Modifier.size(6.dp))
+                    Icon(
+                        imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                        contentDescription = if (expanded) "Свернуть" else "Развернуть",
+                        tint = palette.ink3,
+                        modifier = Modifier.size(18.dp)
+                    )
+                } else {
+                    first.unit?.takeIf { it.isNotBlank() }?.let { unit ->
+                        Text(
+                            text = unit,
+                            style = com.shestikpetr.meteoapp.ui.theme.MeteoTextStyles.MonoSmall,
+                            color = palette.ink4,
+                            maxLines = 1
+                        )
+                    }
+                }
+            }
+            // У одиночного параметра description показываем сразу, у группы —
+            // только в раскрывающихся пунктах (там у каждого датчика своё).
+            if (!isGroup) {
+                first.description?.takeIf { it.isNotBlank() }?.let { desc ->
+                    Text(
+                        text = desc,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = palette.ink3,
+                        maxLines = 2,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(top = 2.dp)
+                    )
+                }
+            }
+        }
+    }
+
+    if (isGroup) {
+        AnimatedVisibility(visible = expanded) {
+            Column(modifier = Modifier.padding(start = 12.dp, top = 4.dp)) {
+                group.forEach { p ->
+                    val isSelected = selected?.code == p.code
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 4.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .clickable {
+                                val same = selected?.code == p.code
+                                onSelect(if (same) null else p)
+                            },
+                        color = if (isSelected) palette.bgSunken else palette.bgElev,
+                        border = androidx.compose.foundation.BorderStroke(
+                            1.dp,
+                            if (isSelected) palette.line2 else palette.line
+                        ),
+                        shape = RoundedCornerShape(6.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
                             Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                                modifier = Modifier.fillMaxWidth(),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
+                                // Имя «дочерки»: используем description как уточнение
+                                // (например, «Воздух», «Грунт»). Если description нет —
+                                // показываем код параметра как подпись.
                                 Text(
-                                    text = param.name,
+                                    text = p.description?.takeIf { it.isNotBlank() } ?: "Датчик #${p.code}",
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = palette.ink,
                                     maxLines = 1,
                                     overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                                     modifier = Modifier.weight(1f)
                                 )
-                                param.unit?.takeIf { it.isNotBlank() }?.let { unit ->
+                                p.unit?.takeIf { it.isNotBlank() }?.let { unit ->
                                     Spacer(Modifier.size(6.dp))
                                     Text(
                                         text = unit,
@@ -389,9 +518,7 @@ private fun ParametersTab(
                             }
                         }
                     }
-                    if (row.size == 1) Box(modifier = Modifier.weight(1f)) {}
                 }
-                Spacer(Modifier.size(6.dp))
             }
         }
     }
