@@ -25,9 +25,9 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ShowChart
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.BottomSheetScaffold
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -61,7 +61,7 @@ import com.shestikpetr.meteoapp.presentation.main.components.DetailPanel
 import com.shestikpetr.meteoapp.presentation.main.components.OsmMapView
 import com.shestikpetr.meteoapp.presentation.main.components.StationListPanel
 import com.shestikpetr.meteoapp.ui.components.BrandMark
-import com.shestikpetr.meteoapp.ui.components.SegmentedTabs
+import com.shestikpetr.meteoapp.ui.components.SegmentedTabsEqual
 import com.shestikpetr.meteoapp.ui.theme.appColors
 import com.shestikpetr.meteoapp.util.LocationProvider
 import androidx.compose.foundation.clickable
@@ -253,7 +253,7 @@ private fun MainTopBar(
             }
             IconButton(onClick = onStatsClick) {
                 Icon(
-                    imageVector = Icons.Default.Tune,
+                    imageVector = Icons.AutoMirrored.Filled.ShowChart,
                     contentDescription = "Статистика",
                     tint = palette.ink2
                 )
@@ -280,11 +280,12 @@ private fun BottomSheet(
     Column(modifier = Modifier.fillMaxWidth()) {
         Surface(color = MaterialTheme.appColors.bgElev) {
             Column {
-                SegmentedTabs(
+                SegmentedTabsEqual(
                     options = listOf("Параметры", "Станции"),
                     selectedIndex = tab,
                     onSelected = { tab = it },
                     modifier = Modifier
+                        .fillMaxWidth()
                         .padding(horizontal = 14.dp, vertical = 8.dp)
                 )
                 when (tab) {
