@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -279,7 +280,13 @@ private fun BottomSheet(
     onStationSelected: (com.shestikpetr.meteoapp.domain.model.Station) -> Unit
 ) {
     var tab by remember { mutableStateOf(0) }
-    Column(modifier = Modifier.fillMaxWidth()) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            // Учитываем навигационную панель Android внизу, чтобы последний
+            // параметр или станция не оказывались под ней.
+            .navigationBarsPadding()
+    ) {
         Surface(color = MaterialTheme.appColors.bgElev) {
             Column {
                 SegmentedTabsEqual(
@@ -299,6 +306,9 @@ private fun BottomSheet(
                         onStationClick = onStationSelected
                     )
                 }
+                // Запас снизу, чтобы последняя плитка/строка не упиралась в
+                // нижний край шторки.
+                Spacer(Modifier.height(16.dp))
             }
         }
     }
