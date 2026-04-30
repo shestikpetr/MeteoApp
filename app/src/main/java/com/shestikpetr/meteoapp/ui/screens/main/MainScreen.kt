@@ -87,7 +87,7 @@ fun MainScreen(
     val scope = rememberCoroutineScope()
 
     val hiddenStations by settingsManager.hiddenStations.collectAsState(initial = emptySet())
-    val hiddenParameters by settingsManager.hiddenParameters.collectAsState(initial = emptySet())
+    val hiddenParameters by settingsManager.hiddenParameters.collectAsState(initial = emptySet<Int>())
 
     var stations by remember { mutableStateOf<List<UserStationResponse>>(emptyList()) }
     var allParameters by remember { mutableStateOf<List<ParameterMetadata>>(emptyList()) }

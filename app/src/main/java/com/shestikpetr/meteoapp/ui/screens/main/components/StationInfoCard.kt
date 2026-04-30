@@ -86,7 +86,7 @@ fun StationInfoCard(
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
                         Text(
-                            text = stationData.customName ?: stationData.name,
+                            text = stationData.name,
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.SemiBold,
                             maxLines = 1,
@@ -164,7 +164,7 @@ private fun ParameterValueItem(
                 modifier = Modifier.weight(1f)
             ) {
                 Icon(
-                    imageVector = getParameterIcon(param.code),
+                    imageVector = getParameterIcon(param.name),
                     contentDescription = null,
                     tint = SkyBlue40,
                     modifier = Modifier.size(20.dp)

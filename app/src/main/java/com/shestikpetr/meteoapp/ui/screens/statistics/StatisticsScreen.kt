@@ -108,7 +108,7 @@ fun StatisticsScreen(
     val settingsManager = remember { SettingsManager(context) }
 
     val hiddenStations by settingsManager.hiddenStations.collectAsState(initial = emptySet())
-    val hiddenParameters by settingsManager.hiddenParameters.collectAsState(initial = emptySet())
+    val hiddenParameters by settingsManager.hiddenParameters.collectAsState(initial = emptySet<Int>())
     val tooltipsEnabled by settingsManager.tooltipsEnabled.collectAsState(initial = true)
 
     var stations by remember { mutableStateOf<List<UserStationResponse>>(emptyList()) }
@@ -121,7 +121,7 @@ fun StatisticsScreen(
     var historyData by remember { mutableStateOf<List<TimeSeriesDataPoint>>(emptyList()) }
     var parameterUnit by remember { mutableStateOf<String?>(null) }
     // Data for additional selected parameters
-    var additionalParamsData by remember { mutableStateOf<Map<String, List<TimeSeriesDataPoint>>>(emptyMap()) }
+    var additionalParamsData by remember { mutableStateOf<Map<Int, List<TimeSeriesDataPoint>>>(emptyMap()) }
 
     var isLoading by remember { mutableStateOf(true) }
     var isLoadingHistory by remember { mutableStateOf(false) }
@@ -171,7 +171,7 @@ fun StatisticsScreen(
         isLoading = true
         val result = stationRepository.getUserStations()
         result.getOrNull()?.let { loaded ->
-            val visible = loaded.filter { (it.station?.stationNumber ?: "") !in hiddenStations }
+            val visible = loaded.filter { it.stationNumber !in hiddenStations }
             stations = visible
             if (visible.isNotEmpty() && (selectedStation == null || selectedStation !in visible)) {
                 selectedStation = visible.first()
@@ -182,7 +182,7 @@ fun StatisticsScreen(
 
     // Load parameters when station changes
     LaunchedEffect(selectedStation, hiddenParameters) {
-        selectedStation?.station?.stationNumber?.let { stationNumber ->
+        selectedStation?.stationNumber?.let { stationNumber ->
             val result = stationRepository.getStationParameters(stationNumber)
             result.getOrNull()?.let { loaded ->
                 val visible = loaded.filter { it.code !in hiddenParameters }
@@ -199,19 +199,18 @@ fun StatisticsScreen(
 
     // Load last data time for the station (independent of selected period)
     LaunchedEffect(selectedStation, selectedParameters) {
-        val stationNumber = selectedStation?.station?.stationNumber
+        val stationNumber = selectedStation?.stationNumber
         if (stationNumber == null || selectedParameters.isEmpty()) {
             lastDataTime = null
             return@LaunchedEffect
         }
-        val firstParam = selectedParameters.first()
-        stationRepository.getLatestDataTime(stationNumber, firstParam.code)
+        stationRepository.getLatestDataTime(stationNumber)
             .getOrNull()?.let { lastDataTime = it }
     }
 
     // Load history for all selected parameters
     LaunchedEffect(selectedStation, selectedParameters, selectedPeriod, customStartTime, customEndTime) {
-        val stationNumber = selectedStation?.station?.stationNumber
+        val stationNumber = selectedStation?.stationNumber
         if (stationNumber == null || selectedParameters.isEmpty()) {
             historyData = emptyList()
             parameterUnit = null
@@ -245,7 +244,7 @@ fun StatisticsScreen(
         parameterUnit = firstParamData?.parameter?.unit
 
         // Load additional parameters
-        val additional = mutableMapOf<String, List<TimeSeriesDataPoint>>()
+        val additional = mutableMapOf<Int, List<TimeSeriesDataPoint>>()
         selectedParameters.drop(1).forEach { param ->
             val r = stationRepository.getParameterHistory(
                 stationNumber = stationNumber,
@@ -266,7 +265,7 @@ fun StatisticsScreen(
             previousPeriodData = emptyList()
             return@LaunchedEffect
         }
-        val stationNumber = selectedStation?.station?.stationNumber
+        val stationNumber = selectedStation?.stationNumber
         val paramCode = selectedParameters.firstOrNull()?.code
         if (stationNumber != null && paramCode != null) {
             val periodDuration: Long
@@ -380,9 +379,7 @@ fun StatisticsScreen(
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Text(
-                                        text = selectedStation?.customName
-                                            ?: selectedStation?.station?.name
-                                            ?: "Выберите станцию",
+                                        text = selectedStation?.name ?: "Выберите станцию",
                                         style = MaterialTheme.typography.bodyLarge,
                                         fontWeight = FontWeight.Medium,
                                         color = if (selectedStation != null) SkyBlueDark else Color.Gray,
@@ -421,7 +418,7 @@ fun StatisticsScreen(
                                                 )
                                                 Spacer(modifier = Modifier.width(12.dp))
                                                 Text(
-                                                    text = station.customName ?: station.station?.name ?: "",
+                                                    text = station.name,
                                                     fontWeight = if (station == selectedStation) FontWeight.Bold else FontWeight.Normal,
                                                     color = if (station == selectedStation) SkyBlue40 else Color.Black
                                                 )
@@ -867,8 +864,7 @@ fun StatisticsScreen(
                                             exportDataToCsv(
                                                 context = context,
                                                 data = historyData,
-                                                stationName = selectedStation?.customName
-                                                    ?: selectedStation?.station?.name ?: "station",
+                                                stationName = selectedStation?.name ?: "station",
                                                 parameterName = selectedParameters.firstOrNull()?.name ?: "parameter"
                                             )
                                         },

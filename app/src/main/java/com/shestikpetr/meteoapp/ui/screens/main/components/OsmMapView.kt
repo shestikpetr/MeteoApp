@@ -81,7 +81,7 @@ fun OsmMapView(
                     value
                 }
             } else {
-                station.customName ?: station.name
+                station.name
             }
 
             val marker = Marker(mapView).apply {

@@ -9,23 +9,24 @@ import kotlinx.coroutines.flow.map
 class UserSessionStore(private val context: Context) {
 
     companion object {
-        private val USER_ID_KEY = stringPreferencesKey("user_id")
         private val USERNAME_KEY = stringPreferencesKey("username")
+        private val EMAIL_KEY = stringPreferencesKey("email")
     }
 
     val username: Flow<String?> = context.dataStore.data.map { it[USERNAME_KEY] }
+    val email: Flow<String?> = context.dataStore.data.map { it[EMAIL_KEY] }
 
-    suspend fun save(userId: String, username: String) {
+    suspend fun save(username: String, email: String? = null) {
         context.dataStore.edit {
-            it[USER_ID_KEY] = userId
             it[USERNAME_KEY] = username
+            if (email != null) it[EMAIL_KEY] = email
         }
     }
 
     suspend fun clear() {
         context.dataStore.edit {
-            it.remove(USER_ID_KEY)
             it.remove(USERNAME_KEY)
+            it.remove(EMAIL_KEY)
         }
     }
 }

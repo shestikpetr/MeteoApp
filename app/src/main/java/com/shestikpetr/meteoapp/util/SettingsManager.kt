@@ -36,8 +36,11 @@ class SettingsManager(private val context: Context) {
         prefs[HIDDEN_STATIONS_KEY] ?: emptySet()
     }
 
-    val hiddenParameters: Flow<Set<String>> = context.dataStore.data.map { prefs ->
-        prefs[HIDDEN_PARAMETERS_KEY] ?: emptySet()
+    val hiddenParameters: Flow<Set<Int>> = context.dataStore.data.map { prefs ->
+        prefs[HIDDEN_PARAMETERS_KEY]
+            ?.mapNotNull { it.toIntOrNull() }
+            ?.toSet()
+            ?: emptySet()
     }
 
     suspend fun setThemeMode(mode: ThemeMode) {
@@ -63,17 +66,18 @@ class SettingsManager(private val context: Context) {
         }
     }
 
-    suspend fun toggleParameterHidden(parameterCode: String) {
+    suspend fun toggleParameterHidden(parameterCode: Int) {
         context.dataStore.edit { prefs ->
+            val key = parameterCode.toString()
             val current = prefs[HIDDEN_PARAMETERS_KEY] ?: emptySet()
-            prefs[HIDDEN_PARAMETERS_KEY] = if (parameterCode in current) {
-                current - parameterCode
+            prefs[HIDDEN_PARAMETERS_KEY] = if (key in current) {
+                current - key
             } else {
-                current + parameterCode
+                current + key
             }
         }
     }
 
     suspend fun getHiddenStations(): Set<String> = hiddenStations.first()
-    suspend fun getHiddenParameters(): Set<String> = hiddenParameters.first()
+    suspend fun getHiddenParameters(): Set<Int> = hiddenParameters.first()
 }

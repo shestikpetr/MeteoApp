@@ -101,7 +101,7 @@ fun SettingsScreen(
     val themeMode by settingsManager.themeMode.collectAsState(initial = ThemeMode.SYSTEM)
     val tooltipsEnabled by settingsManager.tooltipsEnabled.collectAsState(initial = true)
     val hiddenStations by settingsManager.hiddenStations.collectAsState(initial = emptySet())
-    val hiddenParameters by settingsManager.hiddenParameters.collectAsState(initial = emptySet())
+    val hiddenParameters by settingsManager.hiddenParameters.collectAsState(initial = emptySet<Int>())
     val username by userSessionStore.username.collectAsState(initial = null)
 
     var stations by remember { mutableStateOf<List<UserStationResponse>>(emptyList()) }
@@ -152,11 +152,11 @@ fun SettingsScreen(
     // Delete station dialog
     showDeleteStationDialog?.let { station ->
         DeleteStationDialog(
-            stationName = station.customName ?: station.station?.name ?: "Станция",
+            stationName = station.name,
             onDismiss = { showDeleteStationDialog = null },
             onConfirm = {
                 scope.launch {
-                    val result = stationRepository.deleteStation(station.id)
+                    val result = stationRepository.deleteStation(station.stationNumber)
                     if (result.isSuccess) {
                         Toast.makeText(context, "Станция удалена", Toast.LENGTH_SHORT).show()
                         reloadStations()
@@ -172,11 +172,11 @@ fun SettingsScreen(
     // Rename station dialog
     showRenameStationDialog?.let { station ->
         RenameStationDialog(
-            currentName = station.customName ?: station.station?.name ?: "",
+            currentName = station.name,
             onDismiss = { showRenameStationDialog = null },
             onConfirm = { newName ->
                 scope.launch {
-                    val result = stationRepository.renameStation(station.id, newName)
+                    val result = stationRepository.renameStation(station.stationNumber, newName)
                     if (result.isSuccess) {
                         Toast.makeText(context, "Станция переименована", Toast.LENGTH_SHORT).show()
                         reloadStations()
@@ -364,7 +364,7 @@ fun SettingsScreen(
                 } else {
                     stations.forEachIndexed { index, station ->
                         Spacer(modifier = Modifier.height(if (index == 0) 12.dp else 0.dp))
-                        val stationNumber = station.station?.stationNumber ?: ""
+                        val stationNumber = station.stationNumber
                         val isHidden = stationNumber in hiddenStations
 
                         Row(
@@ -392,7 +392,7 @@ fun SettingsScreen(
                             Spacer(modifier = Modifier.width(12.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = station.customName ?: station.station?.name ?: "Станция",
+                                    text = station.name,
                                     style = MaterialTheme.typography.bodyLarge,
                                     fontWeight = FontWeight.Medium,
                                     maxLines = 1,

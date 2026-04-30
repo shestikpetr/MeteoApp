@@ -194,7 +194,7 @@ private fun StationItem(
                 Spacer(modifier = Modifier.width(12.dp))
                 Column {
                     Text(
-                        text = station.customName ?: station.name,
+                        text = station.name,
                         style = MaterialTheme.typography.bodyLarge,
                         fontWeight = FontWeight.Medium,
                         maxLines = 1,
@@ -257,7 +257,7 @@ private fun ParameterItem(
                     color = if (isSelected) SkyBlue40 else SkyBlue80.copy(alpha = 0.3f)
                 ) {
                     Icon(
-                        imageVector = getParameterIcon(parameter.code),
+                        imageVector = getParameterIcon(parameter.name),
                         contentDescription = null,
                         tint = if (isSelected) Color.White else SkyBlue40,
                         modifier = Modifier

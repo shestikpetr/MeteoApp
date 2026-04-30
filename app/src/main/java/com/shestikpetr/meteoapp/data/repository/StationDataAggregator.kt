@@ -8,19 +8,19 @@ import com.shestikpetr.meteoapp.data.model.UserStationResponse
 
 class StationDataAggregator(private val stationRepository: StationRepository) {
 
+    /**
+     * Объединяет метаданные параметров со всех станций пользователя в один уникальный список.
+     */
     suspend fun getAllParameters(
         stations: List<UserStationResponse>
     ): Result<List<ParameterMetadata>> {
         return try {
-            val allParameters = mutableMapOf<String, ParameterMetadata>()
+            val allParameters = mutableMapOf<Int, ParameterMetadata>()
 
             for (station in stations) {
-                val stationNumber = station.station?.stationNumber ?: continue
-                stationRepository.getStationParameters(stationNumber)
+                stationRepository.getStationParameters(station.stationNumber)
                     .getOrNull()?.forEach { param ->
-                        if (!allParameters.containsKey(param.code)) {
-                            allParameters[param.code] = param
-                        }
+                        allParameters.putIfAbsent(param.code, param)
                     }
             }
 
@@ -30,12 +30,16 @@ class StationDataAggregator(private val stationRepository: StationRepository) {
         }
     }
 
+    /**
+     * Для списка станций возвращает данные для отображения на карте.
+     * Если задан [selectedParameterCode] — заполняет [StationWithData.parameterValue]
+     * последним известным значением этого параметра (или null, если параметра нет/значение пустое).
+     */
     suspend fun getStationsWithData(
         stations: List<UserStationResponse>,
-        selectedParameterCode: String?
+        selectedParameterCode: Int?
     ): List<StationWithData> {
-        return stations.mapNotNull { userStation ->
-            val station = userStation.station ?: return@mapNotNull null
+        return stations.mapNotNull { station ->
             val lat = station.latitude ?: return@mapNotNull null
             val lon = station.longitude ?: return@mapNotNull null
 
@@ -43,26 +47,19 @@ class StationDataAggregator(private val stationRepository: StationRepository) {
             var unit: String? = null
 
             if (selectedParameterCode != null) {
-                val paramsResult = stationRepository.getStationParameters(station.stationNumber)
-                val hasParameter = paramsResult.getOrNull()
-                    ?.any { it.code == selectedParameterCode } == true
-
-                if (hasParameter) {
-                    val dataResult = stationRepository.getLatestParameterValue(
-                        station.stationNumber,
-                        selectedParameterCode
-                    )
-                    dataResult.getOrNull()?.let { (value, paramUnit) ->
-                        paramValue = value
-                        unit = paramUnit
+                stationRepository.getStationData(station.stationNumber)
+                    .getOrNull()
+                    ?.parameters
+                    ?.firstOrNull { it.code == selectedParameterCode }
+                    ?.let { param ->
+                        paramValue = param.value
+                        unit = param.unit
                     }
-                }
             }
 
             StationWithData(
                 stationNumber = station.stationNumber,
                 name = station.name,
-                customName = userStation.customName,
                 latitude = lat,
                 longitude = lon,
                 parameterValue = paramValue,
@@ -71,30 +68,29 @@ class StationDataAggregator(private val stationRepository: StationRepository) {
         }
     }
 
+    /**
+     * Возвращает все актуальные показатели станции одним запросом /data.
+     * Параметры с `value == null` отбрасываются.
+     */
     suspend fun getStationAllData(stationWithData: StationWithData): StationAllData {
-        val parameters = mutableListOf<StationParameterValue>()
+        val data = stationRepository.getStationData(stationWithData.stationNumber).getOrNull()
 
-        stationRepository.getStationParameters(stationWithData.stationNumber)
-            .getOrNull()?.forEach { param ->
-                stationRepository.getLatestParameterValue(stationWithData.stationNumber, param.code)
-                    .getOrNull()?.let { (value, unit) ->
-                        parameters.add(
-                            StationParameterValue(
-                                code = param.code,
-                                name = param.name,
-                                value = value,
-                                unit = unit
-                            )
-                        )
-                    }
-            }
+        val parameters = data?.parameters?.mapNotNull { param ->
+            val value = param.value ?: return@mapNotNull null
+            StationParameterValue(
+                code = param.code,
+                name = param.name,
+                value = value,
+                unit = param.unit
+            )
+        } ?: emptyList()
 
         return StationAllData(
             stationNumber = stationWithData.stationNumber,
             name = stationWithData.name,
-            customName = stationWithData.customName,
             latitude = stationWithData.latitude,
             longitude = stationWithData.longitude,
+            time = data?.time,
             parameters = parameters
         )
     }

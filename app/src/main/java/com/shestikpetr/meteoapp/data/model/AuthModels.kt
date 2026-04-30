@@ -1,6 +1,6 @@
 package com.shestikpetr.meteoapp.data.model
 
-import com.google.gson.annotations.SerializedName
+// --- Requests ---
 
 data class UserLoginRequest(
     val username: String,
@@ -13,42 +13,59 @@ data class UserRegisterRequest(
     val password: String
 )
 
-data class AuthResponse(
-    val success: Boolean = true,
-    val data: AuthData
+data class RefreshTokenRequest(
+    val refreshToken: String
 )
 
-data class AuthData(
-    @SerializedName("user_id") val userId: String,
-    val username: String,
-    @SerializedName("access_token") val accessToken: String,
-    @SerializedName("refresh_token") val refreshToken: String
+data class ChangePasswordRequest(
+    val currentPassword: String,
+    val newPassword: String
 )
 
-data class UserMeResponse(
-    val success: Boolean = true,
-    val data: UserData
+data class UpdateMeRequest(
+    val username: String? = null,
+    val email: String? = null
 )
 
-data class UserData(
-    val id: String,
+// --- Domain DTOs ---
+
+data class UserResponse(
     val username: String,
     val email: String,
-    val role: String,
-    @SerializedName("is_active") val isActive: Boolean
+    val role: String
 )
 
-data class RefreshTokenResponse(
-    val success: Boolean = true,
-    @SerializedName("access_token") val accessToken: String
+data class Tokens(
+    val accessToken: String,
+    val refreshToken: String,
+    val expiresIn: Long? = null
 )
 
-data class ApiError(
-    val detail: List<ValidationError>? = null
+data class AuthLoginData(
+    val user: UserResponse,
+    val tokens: Tokens
 )
 
-data class ValidationError(
-    val loc: List<Any>,
-    val msg: String,
-    val type: String
+data class RefreshTokenData(
+    val accessToken: String
+)
+
+// --- API wrappers ---
+
+data class ApiResponseAuthLoginData(
+    val success: Boolean = false,
+    val data: AuthLoginData? = null,
+    val error: String? = null
+)
+
+data class ApiResponseRefreshTokenData(
+    val success: Boolean = false,
+    val data: RefreshTokenData? = null,
+    val error: String? = null
+)
+
+data class ApiResponseUserResponse(
+    val success: Boolean = false,
+    val data: UserResponse? = null,
+    val error: String? = null
 )
