@@ -1,5 +1,6 @@
 package com.shestikpetr.meteoapp.presentation.main.components
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -19,6 +20,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -26,6 +29,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -185,23 +192,17 @@ fun DetailPanel(
                     )
                 }
             } else {
-                Column(modifier = Modifier.padding(8.dp)) {
-                    visible.chunked(2).forEach { row ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            row.forEach { param ->
-                                ParamCell(
-                                    name = param.name,
-                                    value = param.value,
-                                    unit = param.unit,
-                                    description = param.description,
-                                    modifier = Modifier.weight(1f)
-                                )
-                            }
-                            // Если в строке нечётный — заполнитель
-                            if (row.size == 1) Box(modifier = Modifier.weight(1f)) {}
+                // Группируем параметры по name. Если у станции несколько датчиков
+                // одного типа (например, температура воздуха/грунта/воды) —
+                // они показываются одной раскрывающейся группой.
+                val groups = visible.groupBy { it.name }
+                Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
+                    groups.entries.forEachIndexed { idx, (_, items) ->
+                        if (idx > 0) Spacer(Modifier.height(6.dp))
+                        if (items.size == 1) {
+                            ParamRow(param = items[0])
+                        } else {
+                            ParamGroup(items = items)
                         }
                     }
                 }
@@ -219,58 +220,159 @@ fun DetailPanel(
     }
 }
 
+/**
+ * Одиночный параметр: лейбл + описание слева, значение и единица — крупно справа.
+ * Используется и для одиночных параметров, и для дочерних строк раскрытой группы.
+ */
 @Composable
-private fun ParamCell(
-    name: String,
-    value: Double?,
-    unit: String?,
-    description: String?,
+private fun ParamRow(
+    param: com.shestikpetr.meteoapp.domain.model.ParameterReading,
+    showName: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     val palette = MaterialTheme.appColors
-    Column(
+    Row(
         modifier = modifier
+            .fillMaxWidth()
             .clip(RoundedCornerShape(6.dp))
-            .padding(horizontal = 10.dp, vertical = 8.dp)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        if (showName) {
             Icon(
-                imageVector = getParameterIcon(unit),
+                imageVector = getParameterIcon(param.unit),
                 contentDescription = null,
                 tint = palette.ink3,
                 modifier = Modifier.size(14.dp)
             )
+            Spacer(Modifier.width(6.dp))
+        }
+        Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = name.uppercase(),
+                text = param.name.uppercase(),
                 style = MeteoTextStyles.Label,
                 color = palette.ink4,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
+            param.description?.takeIf { it.isNotBlank() }?.let {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                    color = palette.ink4,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
         }
-        description?.let {
-            Text(
-                text = it,
-                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                color = palette.ink4,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-        Spacer(Modifier.height(2.dp))
+        Spacer(Modifier.width(8.dp))
         Row(verticalAlignment = Alignment.Bottom) {
             Text(
-                text = value?.formatParameterValue() ?: "—",
+                text = param.value?.formatParameterValue() ?: "—",
                 style = MeteoTextStyles.Mono.copy(fontSize = 18.sp, fontWeight = FontWeight.Medium),
                 color = palette.ink
             )
-            unit?.let {
+            param.unit?.takeIf { it.isNotBlank() }?.let {
                 Text(
                     text = it,
                     style = MeteoTextStyles.MonoSmall,
                     color = palette.ink3,
                     modifier = Modifier.padding(start = 3.dp, bottom = 2.dp)
                 )
+            }
+        }
+    }
+}
+
+/**
+ * Группа параметров с одинаковым именем — раскрывающаяся.
+ * В свёрнутом виде: имя + бейдж количества + диапазон значений (мин..макс).
+ * В развёрнутом: список ParamRow с описанием каждого датчика.
+ */
+@Composable
+private fun ParamGroup(
+    items: List<com.shestikpetr.meteoapp.domain.model.ParameterReading>
+) {
+    val palette = MaterialTheme.appColors
+    val first = items.first()
+    var expanded by rememberSaveable(first.name) { mutableStateOf(false) }
+    val values = items.mapNotNull { it.value }
+    val rangeText = when {
+        values.isEmpty() -> null
+        values.size == 1 -> values[0].formatParameterValue()
+        else -> {
+            val mn = values.min().formatParameterValue()
+            val mx = values.max().formatParameterValue()
+            if (mn == mx) mn else "$mn..$mx"
+        }
+    }
+    Column {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(6.dp))
+                .clickable { expanded = !expanded }
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.weight(1f)
+            ) {
+                Icon(
+                    imageVector = getParameterIcon(first.unit),
+                    contentDescription = null,
+                    tint = palette.ink3,
+                    modifier = Modifier.size(14.dp)
+                )
+                Text(
+                    text = first.name.uppercase(),
+                    style = MeteoTextStyles.Label,
+                    color = palette.ink4,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = "${items.size}",
+                    style = MeteoTextStyles.MonoSmall,
+                    color = palette.ink4
+                )
+            }
+            Row(verticalAlignment = Alignment.Bottom) {
+                rangeText?.let {
+                    Text(
+                        text = it,
+                        style = MeteoTextStyles.Mono.copy(fontSize = 16.sp, fontWeight = FontWeight.Medium),
+                        color = palette.ink
+                    )
+                    first.unit?.takeIf { u -> u.isNotBlank() }?.let { unit ->
+                        Text(
+                            text = unit,
+                            style = MeteoTextStyles.MonoSmall,
+                            color = palette.ink3,
+                            modifier = Modifier.padding(start = 3.dp, bottom = 2.dp)
+                        )
+                    }
+                }
+                Spacer(Modifier.width(6.dp))
+                Icon(
+                    imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                    contentDescription = if (expanded) "Свернуть" else "Развернуть",
+                    tint = palette.ink3,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+        }
+        AnimatedVisibility(visible = expanded) {
+            Column(modifier = Modifier.padding(start = 14.dp, top = 2.dp, bottom = 2.dp)) {
+                items.forEach { p ->
+                    // Подпись «дочерки» — берём описание (например, «Воздух»);
+                    // если описания нет, в подписи останется только сам name.
+                    val sub = p.copy(name = p.description?.takeIf { it.isNotBlank() } ?: "Датчик #${p.code}", description = null)
+                    ParamRow(param = sub, showName = false)
+                }
             }
         }
     }
