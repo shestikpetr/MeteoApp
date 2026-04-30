@@ -61,7 +61,9 @@ fun SegmentedTabs(
                         style = labelStyle.copy(
                             fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
                             color = if (isSelected) palette.ink else palette.ink3
-                        )
+                        ),
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                     )
                 }
             }
@@ -96,7 +98,7 @@ fun SegmentedTabsEqual(
                         .clip(RoundedCornerShape(5.dp))
                         .background(if (isSelected) palette.bgElev else androidx.compose.ui.graphics.Color.Transparent)
                         .clickable { onSelected(index) }
-                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                        .padding(horizontal = 6.dp, vertical = 6.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
@@ -104,7 +106,9 @@ fun SegmentedTabsEqual(
                         style = MaterialTheme.typography.labelLarge.copy(
                             fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
                             color = if (isSelected) palette.ink else palette.ink3
-                        )
+                        ),
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                     )
                 }
             }

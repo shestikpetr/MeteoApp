@@ -167,7 +167,7 @@ fun SettingsScreen(
                 }
 
                 ProfileSection(
-                    title = "Привязанные станции",
+                    title = "Станции",
                     subtitle = null,
                     headerActions = {
                         AppButton(
@@ -423,6 +423,11 @@ private fun ProfileSection(
     }
 }
 
+/**
+ * Лейбл слева + компактный контент справа (Switch, Checkbox и т.п.).
+ * Используется только для контролов фиксированного размера, которые
+ * прижимаются к правому краю.
+ */
 @Composable
 private fun FieldRow(
     label: String,
@@ -438,9 +443,30 @@ private fun FieldRow(
             text = label,
             style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
             color = palette.ink2,
-            modifier = Modifier.width(160.dp)
+            modifier = Modifier.weight(1f)
         )
-        Box(modifier = Modifier.weight(1f)) { content() }
+        content()
+    }
+}
+
+/**
+ * Лейбл сверху + контент во всю ширину снизу. Подходит для широких контролов
+ * вроде SegmentedTabsEqual, которые не помещаются справа от лейбла.
+ */
+@Composable
+private fun StackedFieldRow(
+    label: String,
+    content: @Composable () -> Unit
+) {
+    val palette = MaterialTheme.appColors
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+            color = palette.ink2
+        )
+        Spacer(Modifier.height(8.dp))
+        content()
     }
 }
 
