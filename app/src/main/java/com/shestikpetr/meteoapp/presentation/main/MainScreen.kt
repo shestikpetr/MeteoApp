@@ -13,10 +13,13 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -327,12 +330,20 @@ private fun ParametersTab(
             )
         } else {
             state.allParameters.chunked(2).forEach { row ->
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        // IntrinsicSize.Max выравнивает обе ячейки в ряду по самой высокой —
+                        // плитки с описанием и без описания получают одну высоту.
+                        .height(IntrinsicSize.Max),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
                     row.forEach { param ->
                         val isSelected = state.selectedParameter?.code == param.code
                         Surface(
                             modifier = Modifier
                                 .weight(1f)
+                                .fillMaxHeight()
                                 .clip(RoundedCornerShape(6.dp))
                                 .clickable {
                                     onParameterSelected(if (isSelected) null else param)
@@ -345,13 +356,26 @@ private fun ParametersTab(
                             shape = RoundedCornerShape(6.dp)
                         ) {
                             Column(modifier = Modifier.padding(10.dp)) {
-                                Text(
-                                    text = param.name.uppercase(),
-                                    style = com.shestikpetr.meteoapp.ui.theme.MeteoTextStyles.Label,
-                                    color = palette.ink4,
-                                    maxLines = 1,
-                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-                                )
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = param.name.uppercase(),
+                                        style = com.shestikpetr.meteoapp.ui.theme.MeteoTextStyles.Label,
+                                        color = palette.ink4,
+                                        maxLines = 1,
+                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                        modifier = Modifier.weight(1f, fill = false)
+                                    )
+                                    param.unit?.takeIf { it.isNotBlank() }?.let { unit ->
+                                        Spacer(Modifier.size(6.dp))
+                                        Text(
+                                            text = unit,
+                                            style = com.shestikpetr.meteoapp.ui.theme.MeteoTextStyles.MonoSmall,
+                                            color = palette.ink4,
+                                            maxLines = 1,
+                                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                        )
+                                    }
+                                }
                                 param.description?.takeIf { it.isNotBlank() }?.let { desc ->
                                     Text(
                                         text = desc,
@@ -359,14 +383,6 @@ private fun ParametersTab(
                                         color = palette.ink3,
                                         maxLines = 2,
                                         overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                                        modifier = Modifier.padding(top = 2.dp)
-                                    )
-                                }
-                                param.unit?.takeIf { it.isNotBlank() }?.let { unit ->
-                                    Text(
-                                        text = unit,
-                                        style = com.shestikpetr.meteoapp.ui.theme.MeteoTextStyles.MonoSmall,
-                                        color = palette.ink4,
                                         modifier = Modifier.padding(top = 2.dp)
                                     )
                                 }

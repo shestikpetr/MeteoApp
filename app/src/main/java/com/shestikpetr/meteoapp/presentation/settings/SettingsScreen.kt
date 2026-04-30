@@ -217,13 +217,26 @@ fun SettingsScreen(
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = param.name,
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = if (isHidden) palette.ink3 else palette.ink,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(
+                                                text = param.name,
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = if (isHidden) palette.ink3 else palette.ink,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                                modifier = Modifier.weight(1f, fill = false)
+                                            )
+                                            param.unit?.takeIf { it.isNotBlank() }?.let { unit ->
+                                                Spacer(Modifier.width(8.dp))
+                                                Text(
+                                                    text = unit,
+                                                    style = MeteoTextStyles.MonoSmall,
+                                                    color = palette.ink4,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                            }
+                                        }
                                         param.description?.takeIf { it.isNotBlank() }?.let { desc ->
                                             Text(
                                                 text = desc,
@@ -231,15 +244,7 @@ fun SettingsScreen(
                                                 color = palette.ink3,
                                                 maxLines = 2,
                                                 overflow = TextOverflow.Ellipsis,
-                                                modifier = Modifier.padding(top = 1.dp)
-                                            )
-                                        }
-                                        param.unit?.takeIf { it.isNotBlank() }?.let { unit ->
-                                            Text(
-                                                text = unit,
-                                                style = MeteoTextStyles.MonoSmall,
-                                                color = palette.ink4,
-                                                modifier = Modifier.padding(top = 1.dp)
+                                                modifier = Modifier.padding(top = 2.dp)
                                             )
                                         }
                                     }
