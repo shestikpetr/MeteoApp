@@ -4,10 +4,10 @@ import androidx.compose.runtime.Composable
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import com.shestikpetr.meteoapp.ui.screens.auth.AuthScreen
-import com.shestikpetr.meteoapp.ui.screens.main.MainScreen
-import com.shestikpetr.meteoapp.ui.screens.settings.SettingsScreen
-import com.shestikpetr.meteoapp.ui.screens.statistics.StatisticsScreen
+import com.shestikpetr.meteoapp.presentation.auth.AuthScreen
+import com.shestikpetr.meteoapp.presentation.main.MainScreen
+import com.shestikpetr.meteoapp.presentation.settings.SettingsScreen
+import com.shestikpetr.meteoapp.presentation.statistics.StatisticsScreen
 
 sealed class Screen(val route: String) {
     data object Auth : Screen("auth")
@@ -36,17 +36,8 @@ fun NavGraph(startDestination: String) {
 
         composable(Screen.Main.route) {
             MainScreen(
-                onLogout = {
-                    navController.navigate(Screen.Auth.route) {
-                        popUpTo(Screen.Main.route) { inclusive = true }
-                    }
-                },
-                onNavigateToStatistics = {
-                    navController.navigate(Screen.Statistics.route)
-                },
-                onNavigateToSettings = {
-                    navController.navigate(Screen.Settings.route)
-                }
+                onNavigateToStatistics = { navController.navigate(Screen.Statistics.route) },
+                onNavigateToSettings = { navController.navigate(Screen.Settings.route) }
             )
         }
 

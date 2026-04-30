@@ -4,34 +4,46 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.runtime.LaunchedEffect
+import androidx.activity.viewModels
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import com.shestikpetr.meteoapp.navigation.NavGraph
 import com.shestikpetr.meteoapp.navigation.Screen
+import com.shestikpetr.meteoapp.presentation.root.RootViewModel
 import com.shestikpetr.meteoapp.ui.theme.MeteoAppTheme
-import com.shestikpetr.meteoapp.util.TokenStore
+import dagger.hilt.android.AndroidEntryPoint
 
+@AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+
+    private val rootVm: RootViewModel by viewModels()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            MeteoAppTheme {
-                val tokenStore = remember { TokenStore(applicationContext) }
-                var startDestination by remember { mutableStateOf<String?>(null) }
+            val themeMode by rootVm.themeMode.collectAsState()
+            val start by rootVm.start.collectAsState()
 
-                LaunchedEffect(Unit) {
-                    startDestination = if (tokenStore.isLoggedIn()) {
-                        Screen.Main.route
-                    } else {
-                        Screen.Auth.route
+            MeteoAppTheme(themeMode = themeMode) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.background)
+                ) {
+                    when (start) {
+                        RootViewModel.StartDestination.Auth ->
+                            NavGraph(startDestination = Screen.Auth.route)
+                        RootViewModel.StartDestination.Main ->
+                            NavGraph(startDestination = Screen.Main.route)
+                        null -> Unit // первый кадр пока определяется логин
                     }
                 }
-
-                startDestination?.let { NavGraph(startDestination = it) }
             }
         }
     }
