@@ -328,10 +328,9 @@ private fun ParametersTab(
                 modifier = Modifier.padding(vertical = 12.dp)
             )
         } else {
-            // Фиксированная высота плитки даёт одинаковый размер всем параметрам,
-            // независимо от наличия description. Высота рассчитана под:
-            //   1 строка имени + 2 строки описания (maxLines = 2) + padding 10dp x 2.
-            val tileHeight = 88.dp
+            // Плитки на главной — это просто фильтр карты, описание здесь не нужно
+            // (его всё равно видно в DetailPanel при клике на станцию и в Настройках).
+            // Поэтому плитка минимальной высоты: name + unit в одну строку.
             state.allParameters.chunked(2).forEach { row ->
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -342,7 +341,6 @@ private fun ParametersTab(
                         Surface(
                             modifier = Modifier
                                 .weight(1f)
-                                .height(tileHeight)
                                 .clip(RoundedCornerShape(6.dp))
                                 .clickable {
                                     onParameterSelected(if (isSelected) null else param)
@@ -354,39 +352,28 @@ private fun ParametersTab(
                             ),
                             shape = RoundedCornerShape(6.dp)
                         ) {
-                            Column(modifier = Modifier.padding(10.dp)) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = param.name,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = palette.ink,
+                                    maxLines = 1,
+                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                param.unit?.takeIf { it.isNotBlank() }?.let { unit ->
+                                    Spacer(Modifier.size(6.dp))
                                     Text(
-                                        text = param.name.uppercase(),
-                                        style = com.shestikpetr.meteoapp.ui.theme.MeteoTextStyles.Label,
+                                        text = unit,
+                                        style = com.shestikpetr.meteoapp.ui.theme.MeteoTextStyles.MonoSmall,
                                         color = palette.ink4,
-                                        maxLines = 1,
-                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                    param.unit?.takeIf { it.isNotBlank() }?.let { unit ->
-                                        Spacer(Modifier.size(6.dp))
-                                        Text(
-                                            text = unit,
-                                            style = com.shestikpetr.meteoapp.ui.theme.MeteoTextStyles.MonoSmall,
-                                            color = palette.ink4,
-                                            maxLines = 1,
-                                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-                                        )
-                                    }
-                                }
-                                param.description?.takeIf { it.isNotBlank() }?.let { desc ->
-                                    Text(
-                                        text = desc,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = palette.ink3,
-                                        maxLines = 2,
-                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                                        modifier = Modifier.padding(top = 2.dp)
+                                        maxLines = 1
                                     )
                                 }
                             }
