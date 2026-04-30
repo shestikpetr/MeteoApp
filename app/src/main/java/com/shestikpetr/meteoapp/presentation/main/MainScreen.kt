@@ -13,10 +13,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -189,9 +187,10 @@ fun MainScreen(
                 visible = activeLatest != null,
                 enter = slideInVertically(initialOffsetY = { -it }) + fadeIn(),
                 exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut(),
+                // Карточка прижимается под топбар (paddingValues уже учитывает
+                // высоту топбара + статус-бара), без повторного statusBarsPadding.
                 modifier = Modifier
                     .align(Alignment.TopCenter)
-                    .statusBarsPadding()
                     .padding(horizontal = 12.dp, vertical = 12.dp)
                     .widthIn(max = 420.dp)
             ) {
@@ -329,13 +328,13 @@ private fun ParametersTab(
                 modifier = Modifier.padding(vertical = 12.dp)
             )
         } else {
+            // Фиксированная высота плитки даёт одинаковый размер всем параметрам,
+            // независимо от наличия description. Высота рассчитана под:
+            //   1 строка имени + 2 строки описания (maxLines = 2) + padding 10dp x 2.
+            val tileHeight = 88.dp
             state.allParameters.chunked(2).forEach { row ->
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        // IntrinsicSize.Max выравнивает обе ячейки в ряду по самой высокой —
-                        // плитки с описанием и без описания получают одну высоту.
-                        .height(IntrinsicSize.Max),
+                    modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     row.forEach { param ->
@@ -343,7 +342,7 @@ private fun ParametersTab(
                         Surface(
                             modifier = Modifier
                                 .weight(1f)
-                                .fillMaxHeight()
+                                .height(tileHeight)
                                 .clip(RoundedCornerShape(6.dp))
                                 .clickable {
                                     onParameterSelected(if (isSelected) null else param)
@@ -356,14 +355,18 @@ private fun ParametersTab(
                             shape = RoundedCornerShape(6.dp)
                         ) {
                             Column(modifier = Modifier.padding(10.dp)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
                                     Text(
                                         text = param.name.uppercase(),
                                         style = com.shestikpetr.meteoapp.ui.theme.MeteoTextStyles.Label,
                                         color = palette.ink4,
                                         maxLines = 1,
                                         overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                                        modifier = Modifier.weight(1f, fill = false)
+                                        modifier = Modifier.weight(1f)
                                     )
                                     param.unit?.takeIf { it.isNotBlank() }?.let { unit ->
                                         Spacer(Modifier.size(6.dp))

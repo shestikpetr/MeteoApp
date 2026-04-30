@@ -61,8 +61,19 @@ fun DetailPanel(
         border = BorderStroke(1.dp, palette.line)
     ) {
         Column {
-            Box {
-                Column(modifier = Modifier.padding(horizontal = 18.dp, vertical = 16.dp)) {
+            // Box с fillMaxWidth, чтобы Alignment.TopEnd прижимал крестик к правому
+            // краю карточки, а не к правому краю внутреннего Column.
+            Box(modifier = Modifier.fillMaxWidth()) {
+                // Дополнительный правый отступ резервирует место под крестик,
+                // чтобы длинные имена и ellipsis не попадали под кнопку.
+                Column(
+                    modifier = Modifier.padding(
+                        start = 18.dp,
+                        end = 52.dp,
+                        top = 16.dp,
+                        bottom = 16.dp
+                    )
+                ) {
                     Text(
                         text = if (latest.latitude != null && latest.longitude != null)
                             "${latest.latitude.format4()}°, ${latest.longitude.format4()}°"
