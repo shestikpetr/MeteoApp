@@ -104,8 +104,10 @@ fun DetailPanel(
                         style = MaterialTheme.typography.bodySmall,
                         color = palette.ink3
                     )
-                    val temp = latest.parameters.firstOrNull { it.code == TEMPERATURE_CODE }?.value
-                    if (temp != null) {
+                    val tempParam = latest.parameters.firstOrNull { it.code == TEMPERATURE_CODE }
+                    val temp = tempParam?.value
+                    val showTempHero = temp != null && TEMPERATURE_CODE !in hiddenParameterCodes
+                    if (showTempHero) {
                         Spacer(Modifier.height(12.dp))
                         Row(verticalAlignment = Alignment.Bottom) {
                             Text(
