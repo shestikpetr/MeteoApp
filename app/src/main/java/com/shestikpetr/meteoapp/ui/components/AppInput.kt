@@ -1,6 +1,7 @@
 package com.shestikpetr.meteoapp.ui.components
 
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -40,7 +41,7 @@ fun AppInput(
     trailingIcon: @Composable (() -> Unit)? = null
 ) {
     val palette = MaterialTheme.appColors
-    androidx.compose.foundation.layout.Column(modifier = modifier) {
+    androidx.compose.foundation.layout.Column(modifier = modifier.fillMaxWidth()) {
         if (label != null) {
             AppLabel(text = label)
             Spacer(Modifier.height(5.dp))
@@ -78,9 +79,7 @@ fun AppInput(
                 unfocusedLabelColor = palette.ink3,
                 disabledLabelColor = palette.ink4
             ),
-            modifier = Modifier.then(
-                if (modifier != Modifier) Modifier else Modifier
-            )
+            modifier = Modifier.fillMaxWidth()
         )
         when {
             error != null -> {
