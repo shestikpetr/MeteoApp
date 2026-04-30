@@ -88,9 +88,9 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    fun onAddStation(stationNumber: String) {
+    fun onAddStation(stationNumber: String, customName: String? = null) {
         viewModelScope.launch {
-            attachStation(stationNumber).fold(
+            attachStation(stationNumber, customName).fold(
                 onSuccess = {
                     _effects.send(SettingsEffect.Toast("Станция добавлена"))
                     reload()

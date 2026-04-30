@@ -20,8 +20,9 @@ import com.shestikpetr.meteoapp.ui.components.AppInput
 import com.shestikpetr.meteoapp.ui.theme.appColors
 
 @Composable
-fun AddStationDialog(onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
+fun AddStationDialog(onDismiss: () -> Unit, onConfirm: (number: String, customName: String?) -> Unit) {
     var stationNumber by remember { mutableStateOf("") }
+    var customName by remember { mutableStateOf("") }
     val palette = MaterialTheme.appColors
     AlertDialog(
         containerColor = palette.bgElev,
@@ -29,21 +30,29 @@ fun AddStationDialog(onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
         onDismissRequest = onDismiss,
         title = { Text("Привязать станцию", style = MaterialTheme.typography.titleLarge) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                Text(
-                    text = "Введите серийный номер метеостанции",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = palette.ink3
-                )
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
                 AppInput(
                     value = stationNumber,
                     onValueChange = { stationNumber = it },
+                    label = "Номер станции",
                     placeholder = "MS-12345"
+                )
+                AppInput(
+                    value = customName,
+                    onValueChange = { customName = it },
+                    label = "Имя (необязательно)",
+                    placeholder = "Например, «Дача»",
+                    helper = "Можно задать своё имя — оно будет видно вместо номера"
                 )
             }
         },
         confirmButton = {
-            TextButton(onClick = { onConfirm(stationNumber.trim()) }, enabled = stationNumber.isNotBlank()) {
+            TextButton(
+                onClick = {
+                    onConfirm(stationNumber.trim(), customName.trim().ifBlank { null })
+                },
+                enabled = stationNumber.isNotBlank()
+            ) {
                 Text("Привязать", color = palette.ink)
             }
         },

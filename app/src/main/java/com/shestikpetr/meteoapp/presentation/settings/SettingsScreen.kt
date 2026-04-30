@@ -91,8 +91,8 @@ fun SettingsScreen(
     if (showAddStation) {
         AddStationDialog(
             onDismiss = { showAddStation = false },
-            onConfirm = { sn ->
-                viewModel.onAddStation(sn)
+            onConfirm = { number, name ->
+                viewModel.onAddStation(number, name)
                 showAddStation = false
             }
         )
@@ -132,12 +132,6 @@ fun SettingsScreen(
                     .widthIn(max = 880.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Text(
-                    text = "Настройки",
-                    style = MaterialTheme.typography.headlineLarge,
-                    color = palette.ink
-                )
-
                 ProfileHero(
                     username = state.user?.username ?: "—",
                     email = state.user?.email,
@@ -146,10 +140,7 @@ fun SettingsScreen(
                     onLogout = viewModel::onLogout
                 )
 
-                ProfileSection(
-                    title = "Внешний вид",
-                    subtitle = "Тёмная или светлая тема и подсказки в интерфейсе"
-                ) {
+                ProfileSection(title = "Внешний вид", subtitle = null) {
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         FieldRow(label = "Тема") {
                             SegmentedTabsEqual(
@@ -177,8 +168,7 @@ fun SettingsScreen(
 
                 ProfileSection(
                     title = "Привязанные станции",
-                    subtitle = if (state.stations.isEmpty()) "Пока ни одной — привяжите станцию ниже."
-                    else "${state.stations.size} ст. доступны на карте и в статистике",
+                    subtitle = null,
                     headerActions = {
                         AppButton(
                             text = "Привязать",
@@ -214,10 +204,7 @@ fun SettingsScreen(
                 }
 
                 if (state.parameters.isNotEmpty()) {
-                    ProfileSection(
-                        title = "Скрытие параметров",
-                        subtitle = "Скрытые параметры не показываются на карте и в статистике"
-                    ) {
+                    ProfileSection(title = "Параметры", subtitle = null) {
                         Column {
                             state.parameters.forEachIndexed { index, param ->
                                 val isHidden = param.code in state.settings.hiddenParameters
@@ -299,7 +286,7 @@ private fun SettingsTopBar(onNavigateBack: () -> Unit) {
                 )
             }
             Text(
-                text = "Профиль",
+                text = "Настройки",
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
                 color = palette.ink
             )
