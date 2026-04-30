@@ -3,10 +3,13 @@
     Foreground для adaptive-иконки: белая «M-волна», как в meteo-web/app/icon.svg.
 
     Координаты в исходном svg: viewBox 24×24, path "M6 17 L6 7 L12 13 L18 7 L18 17".
-    На холсте 108×108 безопасная зона ≈ 66dp (центр), поэтому масштабируем path
-    в 0.5× от 108 (=54dp), чтобы он гарантированно поместился в маске.
-    Это даёт path в координатах 108×108: x ∈ [27..81], y ∈ [31.5..76.5].
-    Stroke-width пропорционально: 2.2 × 4.5 ≈ 10.
+    На холсте 108×108 безопасная зона adaptive-icon ~66dp в центре (с учётом
+    круглых масок), плюс сама линия имеет stroke-width — поэтому глиф
+    масштабируется в 3×, а не 4.5×, чтобы крайние точки с учётом скруглений
+    всегда оставались внутри маски любой формы.
+
+    36 + 3*x, 18 + 3*y — масштаб 3× с центрированием в 108×108.
+    Stroke 2.2 × 3 ≈ 7.
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
@@ -14,9 +17,9 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
     <path
-        android:pathData="M27,76.5 L27,31.5 L54,58.5 L81,31.5 L81,76.5"
+        android:pathData="M36,69 L36,39 L54,57 L72,39 L72,69"
         android:strokeColor="#FFFFFF"
-        android:strokeWidth="10"
+        android:strokeWidth="7"
         android:strokeLineCap="round"
         android:strokeLineJoin="round" />
 </vector>
