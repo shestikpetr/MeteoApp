@@ -15,6 +15,15 @@ val meteoBaseUrl: String = localProperties.getProperty("METEO_BASE_URL")
     ?: System.getenv("METEO_BASE_URL")
     ?: "https://example.com/"
 
+val releaseStoreFile: String? = localProperties.getProperty("RELEASE_STORE_FILE")
+    ?: System.getenv("RELEASE_STORE_FILE")
+val releaseStorePassword: String? = localProperties.getProperty("RELEASE_STORE_PASSWORD")
+    ?: System.getenv("RELEASE_STORE_PASSWORD")
+val releaseKeyAlias: String? = localProperties.getProperty("RELEASE_KEY_ALIAS")
+    ?: System.getenv("RELEASE_KEY_ALIAS")
+val releaseKeyPassword: String? = localProperties.getProperty("RELEASE_KEY_PASSWORD")
+    ?: System.getenv("RELEASE_KEY_PASSWORD")
+
 android {
     namespace = "com.shestikpetr.meteoapp"
     compileSdk {
@@ -33,6 +42,17 @@ android {
         buildConfigField("String", "BASE_URL", "\"$meteoBaseUrl\"")
     }
 
+    signingConfigs {
+        create("release") {
+            if (releaseStoreFile != null) {
+                storeFile = file(releaseStoreFile!!)
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
@@ -40,6 +60,11 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            signingConfig = if (releaseStoreFile != null) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
     }
     compileOptions {

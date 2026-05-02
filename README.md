@@ -32,6 +32,23 @@ Android-приложение для мониторинга данных мете
    Если ничего не задано, используется заглушка `https://example.com/`.
 3. Запустить на устройстве/эмуляторе с Android 8.0+ (API 26).
 
+### Release APK
+
+Для подписанной сборки в `local.properties` дополнительно прописать:
+```
+RELEASE_STORE_FILE=/path/to/keystore.jks
+RELEASE_STORE_PASSWORD=...
+RELEASE_KEY_ALIAS=...
+RELEASE_KEY_PASSWORD=...
+```
+Если переменные не заданы, release собирается с debug-ключом (для разработки).
+
+Команда сборки:
+```
+./gradlew assembleRelease
+```
+Готовый APK: `app/build/outputs/apk/release/app-release.apk`.
+
 ## О проекте
 
 Данное приложение - моя дипломная работа в ТПУ (Томском политехническом университете).
