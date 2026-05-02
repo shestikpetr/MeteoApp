@@ -9,12 +9,16 @@ fun Double.formatParameterValue(): String = String.format(Locale.US, "%.1f", thi
 
 private val DATE_TIME = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault())
 private val DATE_ONLY = SimpleDateFormat("dd.MM.yyyy", Locale.getDefault())
+private val TIME_ONLY = SimpleDateFormat("HH:mm", Locale.getDefault())
 
 fun formatDateTime(epochSeconds: Long?): String =
     if (epochSeconds == null) "—" else DATE_TIME.format(Date(epochSeconds * 1000))
 
 fun formatDate(epochSeconds: Long?): String =
     if (epochSeconds == null) "—" else DATE_ONLY.format(Date(epochSeconds * 1000))
+
+fun formatTime(epochSeconds: Long?): String =
+    if (epochSeconds == null) "—" else TIME_ONLY.format(Date(epochSeconds * 1000))
 
 /**
  * «3 мин назад», «вчера», «давно». Возвращает «—» если время неизвестно.

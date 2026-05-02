@@ -28,28 +28,41 @@ enum class TimePeriod(val label: String, val hours: Int) {
     CUSTOM("Свой", 0)
 }
 
+/** Идентификатор серии: «станция × параметр». */
+data class SeriesKey(val stationNumber: String, val parameterCode: Int)
+
 data class StatisticsUiState(
     val isLoading: Boolean = true,
     val isLoadingHistory: Boolean = false,
     val stations: List<Station> = emptyList(),
-    val selectedStation: Station? = null,
+    /** Несколько выбранных станций. Если >1 — допускается ровно один параметр. */
+    val selectedStations: List<Station> = emptyList(),
+    /** Параметры — пересечение по выбранным станциям (одинаковые во всех). */
     val parameters: List<ParameterMeta> = emptyList(),
     val selectedParameters: List<ParameterMeta> = emptyList(),
     val period: TimePeriod = TimePeriod.DAY,
-    val customStartTime: Long? = null,
-    val customEndTime: Long? = null,
-    val historyData: List<TimeSeriesPoint> = emptyList(),
-    val parameterUnit: String? = null,
-    val additionalParamsData: Map<Int, List<TimeSeriesPoint>> = emptyMap(),
-    val previousPeriodData: List<TimeSeriesPoint> = emptyList(),
+    /** Произвольный диапазон в миллисекундах. */
+    val customStartMs: Long? = null,
+    val customEndMs: Long? = null,
+    /** История по каждой серии. */
+    val seriesData: Map<SeriesKey, List<TimeSeriesPoint>> = emptyMap(),
+    val previousPeriodData: Map<SeriesKey, List<TimeSeriesPoint>> = emptyMap(),
+    /** Единицы измерения по коду параметра. */
+    val parameterUnits: Map<Int, String?> = emptyMap(),
     val comparePeriodEnabled: Boolean = false,
     val thresholdMin: Double? = null,
     val thresholdMax: Double? = null,
     val showTrendLine: Boolean = true,
-    val lastDataTime: Long? = null,
-    val tooltipsEnabled: Boolean = true,
+    /** «Время последних данных» по каждой видимой станции (ключ — stationNumber). */
+    val lastDataTimes: Map<String, Long?> = emptyMap(),
     val settings: AppSettings = AppSettings()
-)
+) {
+    val isMultiStation: Boolean get() = selectedStations.size > 1
+    val maxParametersAllowed: Int get() = if (isMultiStation) 1 else MAX_PARAMETERS
+}
+
+private const val MAX_PARAMETERS = 5
+private const val MAX_STATIONS = 3
 
 @HiltViewModel
 class StatisticsViewModel @Inject constructor(
@@ -63,11 +76,10 @@ class StatisticsViewModel @Inject constructor(
     private val raw = MutableStateFlow(StatisticsUiState())
 
     val state: StateFlow<StatisticsUiState> = combine(raw, observeSettings()) { s, settings ->
-        s.copy(settings = settings, tooltipsEnabled = settings.tooltipsEnabled)
+        s.copy(settings = settings)
     }.stateIn(viewModelScope, SharingStarted.Eagerly, StatisticsUiState())
 
     init {
-        // При появлении настроек — фильтруем станции и параметры от скрытых.
         viewModelScope.launch {
             observeSettings().collect { settings ->
                 refreshAfterSettingsChange(settings)
@@ -78,23 +90,34 @@ class StatisticsViewModel @Inject constructor(
     private suspend fun refreshAfterSettingsChange(settings: AppSettings) {
         if (raw.value.stations.isEmpty() && raw.value.isLoading) {
             loadStations(settings)
-        } else {
-            // Подрезаем выбранную станцию/параметры если они стали скрытыми.
-            raw.update { current ->
-                val visibleStations = current.stations.filter { it.stationNumber !in settings.hiddenStations }
-                val visibleParams = current.parameters.filter { it.code !in settings.hiddenParameters }
-                val newSelected =
-                    current.selectedStation?.takeIf { it.stationNumber !in settings.hiddenStations }
-                        ?: visibleStations.firstOrNull()
-                val newSelectedParams =
-                    current.selectedParameters.filter { it.code !in settings.hiddenParameters }
-                        .ifEmpty { listOfNotNull(visibleParams.firstOrNull()) }
-                current.copy(
-                    selectedStation = newSelected,
-                    parameters = visibleParams,
-                    selectedParameters = newSelectedParams
-                )
-            }
+            return
+        }
+        // Сужаем выборы при появлении новых скрытий.
+        val current = raw.value
+        val visibleStations = current.stations.filter { it.stationNumber !in settings.hiddenStations }
+        val newSelectedStations = current.selectedStations
+            .filter { it.stationNumber !in settings.hiddenStations }
+            .ifEmpty { listOfNotNull(visibleStations.firstOrNull()) }
+        val visibleParams = current.parameters.filter { it.code !in settings.hiddenParameters }
+        val newSelectedParams = current.selectedParameters
+            .filter { it.code !in settings.hiddenParameters }
+            .ifEmpty { listOfNotNull(visibleParams.firstOrNull()) }
+        val changed =
+            newSelectedStations.map { it.stationNumber } != current.selectedStations.map { it.stationNumber } ||
+                    newSelectedParams.map { it.code } != current.selectedParameters.map { it.code } ||
+                    visibleStations != current.stations
+        raw.update {
+            it.copy(
+                stations = visibleStations,
+                selectedStations = newSelectedStations,
+                parameters = visibleParams,
+                selectedParameters = newSelectedParams
+            )
+        }
+        if (changed) {
+            loadAvailableParameters(newSelectedStations)
+            reloadHistory()
+            reloadLastDataTime()
         }
     }
 
@@ -103,31 +126,41 @@ class StatisticsViewModel @Inject constructor(
         val list = getUserStations().getOrElse { emptyList() }
         val visible = list.filter { it.stationNumber !in settings.hiddenStations }
         raw.update { it.copy(stations = visible, isLoading = false) }
-        visible.firstOrNull()?.let { selectStation(it) }
+        // Подгружаем «последние данные» сразу для всего списка.
+        reloadLastDataTime()
+        // Стартуем с одной станцией.
+        visible.firstOrNull()?.let { toggleStation(it) }
     }
 
-    fun selectStation(station: Station) {
-        raw.update { it.copy(selectedStation = station, parameters = emptyList(), selectedParameters = emptyList()) }
+    fun toggleStation(station: Station) {
+        val current = raw.value
+        val already = current.selectedStations.any { it.stationNumber == station.stationNumber }
+        val next = when {
+            already && current.selectedStations.size > 1 ->
+                current.selectedStations.filter { it.stationNumber != station.stationNumber }
+            already -> current.selectedStations
+            current.selectedStations.size < MAX_STATIONS ->
+                current.selectedStations + station
+            else -> current.selectedStations
+        }
+        if (next.map { it.stationNumber } == current.selectedStations.map { it.stationNumber }) return
+        raw.update { it.copy(selectedStations = next) }
         viewModelScope.launch {
-            val params = getStationParameters(station.stationNumber).getOrElse { emptyList() }
-            val visible = params.filter { it.code !in raw.value.settings.hiddenParameters }
-            val first = listOfNotNull(visible.firstOrNull())
-            raw.update {
-                it.copy(parameters = visible, selectedParameters = first)
-            }
+            loadAvailableParameters(next)
             reloadHistory()
-            reloadLastDataTime()
         }
     }
 
     fun toggleParameter(meta: ParameterMeta) {
         raw.update { current ->
             val isSelected = current.selectedParameters.any { it.code == meta.code }
+            val limit = current.maxParametersAllowed
             val next = when {
                 isSelected && current.selectedParameters.size > 1 ->
                     current.selectedParameters.filter { it.code != meta.code }
                 isSelected -> current.selectedParameters
-                current.selectedParameters.size < MAX_SELECTED_PARAMS ->
+                limit == 1 -> listOf(meta)
+                current.selectedParameters.size < limit ->
                     current.selectedParameters + meta
                 else -> current.selectedParameters
             }
@@ -137,17 +170,25 @@ class StatisticsViewModel @Inject constructor(
     }
 
     fun setPeriod(period: TimePeriod) {
+        if (period == TimePeriod.CUSTOM) {
+            // Активация «Свой» — без полной перезагрузки, просто запомнить.
+            raw.update { it.copy(period = period) }
+            if (raw.value.customStartMs != null && raw.value.customEndMs != null) reloadHistory()
+            return
+        }
         raw.update { it.copy(period = period) }
         reloadHistory()
     }
 
-    fun setCustomStartTime(epochMs: Long) {
-        raw.update { it.copy(customStartTime = epochMs, period = TimePeriod.CUSTOM) }
-        reloadHistory()
-    }
-
-    fun setCustomEndTime(epochMs: Long) {
-        raw.update { it.copy(customEndTime = epochMs, period = TimePeriod.CUSTOM) }
+    fun setCustomRange(startMs: Long, endMs: Long) {
+        if (startMs >= endMs) return
+        raw.update {
+            it.copy(
+                customStartMs = startMs,
+                customEndMs = endMs,
+                period = TimePeriod.CUSTOM
+            )
+        }
         reloadHistory()
     }
 
@@ -164,50 +205,98 @@ class StatisticsViewModel @Inject constructor(
         raw.update { it.copy(showTrendLine = value) }
     }
 
+    private suspend fun loadAvailableParameters(stations: List<Station>) {
+        if (stations.isEmpty()) {
+            raw.update { it.copy(parameters = emptyList(), selectedParameters = emptyList()) }
+            return
+        }
+        val hidden = raw.value.settings.hiddenParameters
+        val perStation = stations.map { station ->
+            getStationParameters(station.stationNumber).getOrElse { emptyList() }
+                .filter { it.code !in hidden }
+        }
+        // Пересечение по коду; имена/описания берём из первой станции.
+        val intersection = if (perStation.isEmpty()) emptyList()
+        else {
+            val codes = perStation.map { it.map { p -> p.code }.toSet() }
+                .reduce { acc, set -> acc intersect set }
+            perStation[0].filter { it.code in codes }
+        }
+        raw.update { current ->
+            val survived = current.selectedParameters
+                .filter { p -> intersection.any { it.code == p.code } }
+            val isMulti = stations.size > 1
+            val limit = if (isMulti) 1 else MAX_PARAMETERS
+            val newSelected = when {
+                survived.isEmpty() -> listOfNotNull(intersection.firstOrNull())
+                survived.size > limit -> survived.take(limit)
+                else -> survived
+            }
+            current.copy(parameters = intersection, selectedParameters = newSelected)
+        }
+    }
+
     private fun reloadLastDataTime() {
-        val station = raw.value.selectedStation ?: return
+        val stations = raw.value.stations
+        if (stations.isEmpty()) {
+            raw.update { it.copy(lastDataTimes = emptyMap()) }
+            return
+        }
         viewModelScope.launch {
-            val latest = getStationLatest(station.stationNumber).getOrNull()
-            raw.update { it.copy(lastDataTime = latest?.time) }
+            // Грузим параллельно и собираем карту `stationNumber -> time`.
+            val result = mutableMapOf<String, Long?>()
+            stations.forEach { st ->
+                result[st.stationNumber] = getStationLatest(st.stationNumber).getOrNull()?.time
+            }
+            raw.update { it.copy(lastDataTimes = result.toMap()) }
         }
     }
 
     private fun reloadHistory() {
         val current = raw.value
-        val station = current.selectedStation ?: return
-        if (current.selectedParameters.isEmpty()) {
-            raw.update { it.copy(historyData = emptyList(), additionalParamsData = emptyMap(), parameterUnit = null) }
+        val stations = current.selectedStations
+        val params = current.selectedParameters
+        if (stations.isEmpty() || params.isEmpty()) {
+            raw.update {
+                it.copy(
+                    seriesData = emptyMap(),
+                    previousPeriodData = emptyMap(),
+                    parameterUnits = emptyMap()
+                )
+            }
             return
         }
-        val (startTime, endTime) = computeRange(current) ?: return
-
+        val (start, end) = computeRange(current) ?: return
         raw.update { it.copy(isLoadingHistory = true) }
         viewModelScope.launch {
-            val first = current.selectedParameters.first()
-            val firstResult = getParameterHistory(station.stationNumber, first.code, startTime, endTime).getOrNull()
-
-            val additional = mutableMapOf<Int, List<TimeSeriesPoint>>()
-            current.selectedParameters.drop(1).forEach { p ->
-                getParameterHistory(station.stationNumber, p.code, startTime, endTime).getOrNull()?.let {
-                    additional[p.code] = it.points
+            val data = mutableMapOf<SeriesKey, List<TimeSeriesPoint>>()
+            val prev = mutableMapOf<SeriesKey, List<TimeSeriesPoint>>()
+            val units = mutableMapOf<Int, String?>()
+            for (st in stations) {
+                for (p in params) {
+                    val key = SeriesKey(st.stationNumber, p.code)
+                    val res = getParameterHistory(st.stationNumber, p.code, start, end).getOrNull()
+                    if (res != null) {
+                        data[key] = res.points
+                        units.putIfAbsent(p.code, res.parameter.unit ?: p.unit)
+                    } else {
+                        units.putIfAbsent(p.code, p.unit)
+                    }
+                    if (current.comparePeriodEnabled) {
+                        val len = end - start
+                        val prevEnd = start
+                        val prevStart = prevEnd - len
+                        getParameterHistory(st.stationNumber, p.code, prevStart, prevEnd)
+                            .getOrNull()?.let { prev[key] = it.points }
+                    }
                 }
             }
-
-            val previous = if (current.comparePeriodEnabled) {
-                val periodLength = endTime - startTime
-                val prevEnd = startTime
-                val prevStart = prevEnd - periodLength
-                getParameterHistory(station.stationNumber, first.code, prevStart, prevEnd)
-                    .getOrNull()?.points.orEmpty()
-            } else emptyList()
-
             raw.update {
                 it.copy(
                     isLoadingHistory = false,
-                    historyData = firstResult?.points.orEmpty(),
-                    parameterUnit = firstResult?.parameter?.unit,
-                    additionalParamsData = additional,
-                    previousPeriodData = previous
+                    seriesData = data,
+                    previousPeriodData = prev,
+                    parameterUnits = units
                 )
             }
         }
@@ -215,17 +304,13 @@ class StatisticsViewModel @Inject constructor(
 
     private fun computeRange(current: StatisticsUiState): Pair<Long, Long>? {
         return if (current.period == TimePeriod.CUSTOM) {
-            val start = current.customStartTime ?: return null
-            val end = current.customEndTime ?: return null
+            val start = current.customStartMs ?: return null
+            val end = current.customEndMs ?: return null
             (start / 1000) to (end / 1000)
         } else {
             val end = System.currentTimeMillis() / 1000
             val start = end - current.period.hours * 3600L
             start to end
         }
-    }
-
-    private companion object {
-        const val MAX_SELECTED_PARAMS = 5
     }
 }

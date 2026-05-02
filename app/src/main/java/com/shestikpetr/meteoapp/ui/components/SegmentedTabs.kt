@@ -80,7 +80,8 @@ fun SegmentedTabsEqual(
     options: List<String>,
     selectedIndex: Int,
     onSelected: (Int) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    monoLabels: Boolean = false
 ) {
     val palette = MaterialTheme.appColors
     Surface(
@@ -92,6 +93,11 @@ fun SegmentedTabsEqual(
         Row(modifier = Modifier.padding(3.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
             options.forEachIndexed { index, label ->
                 val isSelected = index == selectedIndex
+                val labelStyle = if (monoLabels) {
+                    com.shestikpetr.meteoapp.ui.theme.MeteoTextStyles.MonoSmall
+                } else {
+                    MaterialTheme.typography.labelLarge
+                }
                 Box(
                     modifier = Modifier
                         .weight(1f)
@@ -103,7 +109,7 @@ fun SegmentedTabsEqual(
                 ) {
                     Text(
                         text = label,
-                        style = MaterialTheme.typography.labelLarge.copy(
+                        style = labelStyle.copy(
                             fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
                             color = if (isSelected) palette.ink else palette.ink3
                         ),
