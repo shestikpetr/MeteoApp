@@ -1,6 +1,7 @@
 package com.shestikpetr.meteoapp.di
 
 import com.google.gson.Gson
+import com.shestikpetr.meteoapp.BuildConfig
 import com.shestikpetr.meteoapp.data.local.TokenStorage
 import com.shestikpetr.meteoapp.data.remote.api.MeteoApi
 import com.shestikpetr.meteoapp.data.remote.interceptor.AuthInterceptor
@@ -21,7 +22,7 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 object NetworkModule {
 
-    private const val BASE_URL = "https://your-backend.example.com/"
+    private val BASE_URL: String = BuildConfig.BASE_URL
 
     @Provides
     @Singleton
