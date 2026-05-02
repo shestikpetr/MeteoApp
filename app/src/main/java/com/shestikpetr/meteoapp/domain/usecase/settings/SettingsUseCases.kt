@@ -18,12 +18,6 @@ class SetThemeModeUseCase @Inject constructor(
     suspend operator fun invoke(mode: ThemeMode) = repo.setThemeMode(mode)
 }
 
-class SetTooltipsEnabledUseCase @Inject constructor(
-    private val repo: SettingsRepository
-) {
-    suspend operator fun invoke(enabled: Boolean) = repo.setTooltipsEnabled(enabled)
-}
-
 class ToggleStationHiddenUseCase @Inject constructor(
     private val repo: SettingsRepository
 ) {

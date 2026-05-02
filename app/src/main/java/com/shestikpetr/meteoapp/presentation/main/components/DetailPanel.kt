@@ -213,7 +213,8 @@ fun DetailPanel(
                 AppButton(
                     text = "В статистику →",
                     onClick = onOpenStatistics,
-                    style = AppButtonStyle.Primary
+                    style = AppButtonStyle.Primary,
+                    fullWidth = true
                 )
             }
         }
@@ -286,7 +287,7 @@ private fun ParamRow(
 
 /**
  * Группа параметров с одинаковым именем — раскрывающаяся.
- * В свёрнутом виде: имя + бейдж количества + диапазон значений (мин..макс).
+ * В свёрнутом виде: имя + бейдж количества.
  * В развёрнутом: список ParamRow с описанием каждого датчика.
  */
 @Composable
@@ -296,16 +297,6 @@ private fun ParamGroup(
     val palette = MaterialTheme.appColors
     val first = items.first()
     var expanded by rememberSaveable(first.name) { mutableStateOf(false) }
-    val values = items.mapNotNull { it.value }
-    val rangeText = when {
-        values.isEmpty() -> null
-        values.size == 1 -> values[0].formatParameterValue()
-        else -> {
-            val mn = values.min().formatParameterValue()
-            val mx = values.max().formatParameterValue()
-            if (mn == mx) mn else "$mn..$mx"
-        }
-    }
     Column {
         Row(
             modifier = Modifier
@@ -334,29 +325,16 @@ private fun ParamGroup(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
+            }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
                 Text(
                     text = "${items.size}",
                     style = MeteoTextStyles.MonoSmall,
                     color = palette.ink4
                 )
-            }
-            Row(verticalAlignment = Alignment.Bottom) {
-                rangeText?.let {
-                    Text(
-                        text = it,
-                        style = MeteoTextStyles.Mono.copy(fontSize = 16.sp, fontWeight = FontWeight.Medium),
-                        color = palette.ink
-                    )
-                    first.unit?.takeIf { u -> u.isNotBlank() }?.let { unit ->
-                        Text(
-                            text = unit,
-                            style = MeteoTextStyles.MonoSmall,
-                            color = palette.ink3,
-                            modifier = Modifier.padding(start = 3.dp, bottom = 2.dp)
-                        )
-                    }
-                }
-                Spacer(Modifier.width(6.dp))
                 Icon(
                     imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
                     contentDescription = if (expanded) "Свернуть" else "Развернуть",

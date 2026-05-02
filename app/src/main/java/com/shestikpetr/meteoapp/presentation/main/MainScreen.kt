@@ -23,6 +23,8 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
@@ -60,6 +62,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -121,6 +124,20 @@ fun MainScreen(
     val bottomSheetState = rememberStandardBottomSheetState(initialValue = SheetValue.PartiallyExpanded)
     val scaffoldState = rememberBottomSheetScaffoldState(bottomSheetState = bottomSheetState)
 
+    // Верхний отступ ручки шторки должен «включаться» только когда верх
+    // шторки реально заезжает под статус-бар — иначе в свёрнутом состоянии
+    // над ручкой появляется бесполезная пустота высотой в системный бар.
+    val density = LocalDensity.current
+    val statusBarPx = WindowInsets.statusBars.getTop(density)
+    val sheetTopInsetDp by remember(statusBarPx) {
+        derivedStateOf {
+            val offset = runCatching { bottomSheetState.requireOffset() }
+                .getOrDefault(Float.MAX_VALUE)
+            val pad = (statusBarPx - offset).coerceAtLeast(10f)
+            with(density) { pad.toDp() }
+        }
+    }
+
     BottomSheetScaffold(
         scaffoldState = scaffoldState,
         sheetPeekHeight = 200.dp,
@@ -130,8 +147,13 @@ fun MainScreen(
         sheetTonalElevation = 0.dp,
         sheetShadowElevation = 0.dp,
         sheetDragHandle = {
+            // Верхний отступ появляется только тогда, когда верх шторки
+            // заехал под статус-бар — в свёрнутом состоянии он равен 0.
+            // Фон шторки при полностью раскрытой продолжает доходить до
+            // самого верха экрана.
             Box(
                 modifier = Modifier
+                    .padding(top = sheetTopInsetDp)
                     .padding(top = 8.dp, bottom = 4.dp)
                     .width(36.dp)
                     .size(width = 36.dp, height = 4.dp)

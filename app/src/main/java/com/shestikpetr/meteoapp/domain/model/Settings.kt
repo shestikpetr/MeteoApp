@@ -9,7 +9,6 @@ enum class ThemeMode(val label: String) {
 /** Пользовательские UI-настройки приложения. */
 data class AppSettings(
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
-    val tooltipsEnabled: Boolean = true,
     val hiddenStations: Set<String> = emptySet(),
     val hiddenParameters: Set<Int> = emptySet()
 )

@@ -7,7 +7,6 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.ReadOnlyComposable
-import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import com.shestikpetr.meteoapp.domain.model.ThemeMode
@@ -39,19 +38,12 @@ private val LocalAppPalette = staticCompositionLocalOf<AppPalette> {
     error("AppPalette not provided")
 }
 
-private val LocalTooltipsEnabled = compositionLocalOf { true }
-
 /**
  * Доступ к расширенной палитре. Использовать через `MaterialTheme.appColors`.
  */
 val MaterialTheme.appColors: AppPalette
     @Composable @ReadOnlyComposable
     get() = LocalAppPalette.current
-
-/** Глобальная подсказка, что подсказки в UI включены. */
-val MaterialTheme.tooltipsEnabled: Boolean
-    @Composable @ReadOnlyComposable
-    get() = LocalTooltipsEnabled.current
 
 private val LightPalette = AppPalette(
     ink = MeteoColors.Light.Ink,
@@ -170,7 +162,6 @@ private fun darkSchemeFrom(p: AppPalette) = darkColorScheme(
 @Composable
 fun MeteoAppTheme(
     themeMode: ThemeMode = ThemeMode.SYSTEM,
-    tooltipsEnabled: Boolean = true,
     content: @Composable () -> Unit
 ) {
     val systemDark = isSystemInDarkTheme()
@@ -182,10 +173,7 @@ fun MeteoAppTheme(
     val palette = if (useDark) DarkPalette else LightPalette
     val scheme = if (useDark) darkSchemeFrom(palette) else lightSchemeFrom(palette)
 
-    CompositionLocalProvider(
-        LocalAppPalette provides palette,
-        LocalTooltipsEnabled provides tooltipsEnabled
-    ) {
+    CompositionLocalProvider(LocalAppPalette provides palette) {
         MaterialTheme(
             colorScheme = scheme,
             typography = MeteoTypography,

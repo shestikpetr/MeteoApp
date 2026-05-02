@@ -16,7 +16,6 @@ class SettingsRepositoryImpl @Inject constructor(
     override val settings: Flow<AppSettings> = storage.settings
 
     override suspend fun setThemeMode(mode: ThemeMode) = storage.setThemeMode(mode)
-    override suspend fun setTooltipsEnabled(enabled: Boolean) = storage.setTooltipsEnabled(enabled)
     override suspend fun toggleStationHidden(stationNumber: String) = storage.toggleStationHidden(stationNumber)
     override suspend fun toggleParameterHidden(parameterCode: Int) = storage.toggleParameterHidden(parameterCode)
 }

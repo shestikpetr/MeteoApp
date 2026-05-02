@@ -59,21 +59,3 @@ class RenameStationUseCase @Inject constructor(
     suspend operator fun invoke(stationNumber: String, customName: String?): Result<Station> =
         repo.renameStation(stationNumber, customName)
 }
-
-/**
- * Объединяет метаданные параметров со всех станций пользователя в один уникальный список.
- * Бизнес-логика, не относящаяся к самому репозиторию.
- */
-class GetAllParametersUseCase @Inject constructor(
-    private val getStationParameters: GetStationParametersUseCase
-) {
-    suspend operator fun invoke(stations: List<Station>): Result<List<ParameterMeta>> = runCatching {
-        val byCode = mutableMapOf<Int, ParameterMeta>()
-        for (station in stations) {
-            getStationParameters(station.stationNumber).getOrNull()?.forEach { p ->
-                byCode.putIfAbsent(p.code, p)
-            }
-        }
-        byCode.values.toList()
-    }
-}

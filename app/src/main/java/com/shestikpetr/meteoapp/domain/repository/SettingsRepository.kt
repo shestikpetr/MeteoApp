@@ -13,8 +13,6 @@ interface SettingsRepository {
 
     suspend fun setThemeMode(mode: ThemeMode)
 
-    suspend fun setTooltipsEnabled(enabled: Boolean)
-
     suspend fun toggleStationHidden(stationNumber: String)
 
     suspend fun toggleParameterHidden(parameterCode: Int)

@@ -8,15 +8,16 @@ import com.shestikpetr.meteoapp.domain.model.Station
 import com.shestikpetr.meteoapp.domain.model.ThemeMode
 import com.shestikpetr.meteoapp.domain.model.User
 import com.shestikpetr.meteoapp.domain.repository.AuthRepository
+import com.shestikpetr.meteoapp.domain.usecase.auth.ChangePasswordUseCase
 import com.shestikpetr.meteoapp.domain.usecase.auth.LogoutUseCase
+import com.shestikpetr.meteoapp.domain.usecase.auth.UpdateProfileUseCase
 import com.shestikpetr.meteoapp.domain.usecase.settings.ObserveSettingsUseCase
 import com.shestikpetr.meteoapp.domain.usecase.settings.SetThemeModeUseCase
-import com.shestikpetr.meteoapp.domain.usecase.settings.SetTooltipsEnabledUseCase
 import com.shestikpetr.meteoapp.domain.usecase.settings.ToggleParameterHiddenUseCase
 import com.shestikpetr.meteoapp.domain.usecase.settings.ToggleStationHiddenUseCase
 import com.shestikpetr.meteoapp.domain.usecase.stations.AttachStationUseCase
 import com.shestikpetr.meteoapp.domain.usecase.stations.DetachStationUseCase
-import com.shestikpetr.meteoapp.domain.usecase.stations.GetAllParametersUseCase
+import com.shestikpetr.meteoapp.domain.usecase.stations.GetStationParametersUseCase
 import com.shestikpetr.meteoapp.domain.usecase.stations.GetUserStationsUseCase
 import com.shestikpetr.meteoapp.domain.usecase.stations.RenameStationUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -35,6 +36,13 @@ import javax.inject.Inject
 data class SettingsUiState(
     val user: User? = null,
     val stations: List<Station> = emptyList(),
+    /**
+     * Карта «станция → её параметры». Хранится для того, чтобы при скрытии
+     * станции в разделе «Параметры» пропадали и её параметры — но только
+     * те, что не встречаются ни на одной другой видимой станции.
+     */
+    val parametersByStation: Map<String, List<ParameterMeta>> = emptyMap(),
+    /** Производный от parametersByStation + hiddenStations список параметров для UI. */
     val parameters: List<ParameterMeta> = emptyList(),
     val isLoading: Boolean = true,
     val settings: AppSettings = AppSettings()
@@ -49,22 +57,35 @@ sealed interface SettingsEffect {
 class SettingsViewModel @Inject constructor(
     private val authRepository: AuthRepository,
     private val getUserStations: GetUserStationsUseCase,
-    private val getAllParameters: GetAllParametersUseCase,
+    private val getStationParameters: GetStationParametersUseCase,
     private val attachStation: AttachStationUseCase,
     private val detachStation: DetachStationUseCase,
     private val renameStation: RenameStationUseCase,
     private val toggleStationHidden: ToggleStationHiddenUseCase,
     private val toggleParameterHidden: ToggleParameterHiddenUseCase,
     private val setThemeMode: SetThemeModeUseCase,
-    private val setTooltipsEnabled: SetTooltipsEnabledUseCase,
     private val logout: LogoutUseCase,
+    private val updateProfile: UpdateProfileUseCase,
+    private val changePassword: ChangePasswordUseCase,
     observeSettings: ObserveSettingsUseCase
 ) : ViewModel() {
 
     private val raw = MutableStateFlow(SettingsUiState())
 
     val state: StateFlow<SettingsUiState> = combine(raw, observeSettings()) { s, settings ->
-        s.copy(settings = settings)
+        // Параметры берём только с тех станций, что НЕ скрыты пользователем.
+        // Параметр, встречающийся на нескольких станциях, остаётся виден,
+        // пока хотя бы одна из них не скрыта.
+        val visibleStationNumbers = s.stations
+            .map { it.stationNumber }
+            .filter { it !in settings.hiddenStations }
+        val seen = LinkedHashMap<Int, ParameterMeta>()
+        visibleStationNumbers.forEach { sn ->
+            s.parametersByStation[sn]?.forEach { p ->
+                seen.putIfAbsent(p.code, p)
+            }
+        }
+        s.copy(settings = settings, parameters = seen.values.toList())
     }.stateIn(viewModelScope, SharingStarted.Eagerly, SettingsUiState())
 
     private val _effects = Channel<SettingsEffect>(Channel.BUFFERED)
@@ -81,9 +102,19 @@ class SettingsViewModel @Inject constructor(
         raw.update { it.copy(isLoading = true) }
         viewModelScope.launch {
             val stations = getUserStations().getOrElse { emptyList() }
-            val parameters = getAllParameters(stations).getOrElse { emptyList() }
+            // Грузим параметры постанционно, чтобы знать принадлежность.
+            // Видимый список параметров затем собирается в combine-блоке
+            // на основе `hiddenStations`.
+            val byStation = stations.associate { st ->
+                st.stationNumber to
+                    getStationParameters(st.stationNumber).getOrElse { emptyList() }
+            }
             raw.update {
-                it.copy(stations = stations, parameters = parameters, isLoading = false)
+                it.copy(
+                    stations = stations,
+                    parametersByStation = byStation,
+                    isLoading = false
+                )
             }
         }
     }
@@ -142,8 +173,32 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { setThemeMode(mode) }
     }
 
-    fun onSetTooltipsEnabled(enabled: Boolean) {
-        viewModelScope.launch { setTooltipsEnabled(enabled) }
+    fun onUpdateProfile(username: String?, email: String?) {
+        if (username == null && email == null) return
+        viewModelScope.launch {
+            updateProfile(username, email).fold(
+                onSuccess = { user ->
+                    raw.update { it.copy(user = user) }
+                    _effects.send(SettingsEffect.Toast("Профиль обновлён"))
+                },
+                onFailure = { e ->
+                    _effects.send(SettingsEffect.Toast("Ошибка: ${e.message}"))
+                }
+            )
+        }
+    }
+
+    fun onChangePassword(currentPassword: String, newPassword: String) {
+        viewModelScope.launch {
+            changePassword(currentPassword, newPassword).fold(
+                onSuccess = {
+                    _effects.send(SettingsEffect.Toast("Пароль изменён"))
+                },
+                onFailure = { e ->
+                    _effects.send(SettingsEffect.Toast("Ошибка: ${e.message}"))
+                }
+            )
+        }
     }
 
     fun onLogout() {

@@ -53,7 +53,14 @@ class MainViewModel @Inject constructor(
      */
     val state: StateFlow<VisibleMainUiState> = combine(_state, observeSettings()) { raw, settings ->
         val visibleStations = raw.stations.filter { it.stationNumber !in settings.hiddenStations }
-        val visibleParameters = raw.allParameters.filter { it.code !in settings.hiddenParameters }
+        // Скрывая станцию, скрываем и её параметры — но только те, что
+        // не встречаются на других (видимых) станциях.
+        val codesOnVisibleStations = visibleStations.flatMap { st ->
+            raw.latestByStation[st.stationNumber]?.parameters?.map { it.code }.orEmpty()
+        }.toSet()
+        val visibleParameters = raw.allParameters.filter {
+            it.code in codesOnVisibleStations && it.code !in settings.hiddenParameters
+        }
         VisibleMainUiState(
             isLoading = raw.isLoading,
             isRefreshing = raw.isRefreshing,
@@ -61,7 +68,7 @@ class MainViewModel @Inject constructor(
             latestByStation = raw.latestByStation,
             allParameters = visibleParameters,
             selectedParameter = raw.selectedParameter
-                ?.takeIf { it.code !in settings.hiddenParameters },
+                ?.takeIf { it.code in codesOnVisibleStations && it.code !in settings.hiddenParameters },
             selectedStationNumber = raw.selectedStationNumber
                 ?.takeIf { it !in settings.hiddenStations },
             settings = settings,

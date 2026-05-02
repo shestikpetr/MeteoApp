@@ -18,23 +18,29 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -48,6 +54,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -56,11 +63,12 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.shestikpetr.meteoapp.domain.model.Station
 import com.shestikpetr.meteoapp.domain.model.ThemeMode
 import com.shestikpetr.meteoapp.presentation.settings.dialogs.AddStationDialog
+import com.shestikpetr.meteoapp.presentation.settings.dialogs.ChangePasswordDialog
 import com.shestikpetr.meteoapp.presentation.settings.dialogs.DeleteStationDialog
+import com.shestikpetr.meteoapp.presentation.settings.dialogs.EditProfileDialog
 import com.shestikpetr.meteoapp.presentation.settings.dialogs.RenameStationDialog
 import com.shestikpetr.meteoapp.ui.components.AppButton
 import com.shestikpetr.meteoapp.ui.components.AppButtonStyle
-import com.shestikpetr.meteoapp.ui.components.SegmentedTabsEqual
 import com.shestikpetr.meteoapp.ui.theme.MeteoTextStyles
 import com.shestikpetr.meteoapp.ui.theme.appColors
 
@@ -77,6 +85,8 @@ fun SettingsScreen(
     var showAddStation by remember { mutableStateOf(false) }
     var showDeleteStation by remember { mutableStateOf<Station?>(null) }
     var showRenameStation by remember { mutableStateOf<Station?>(null) }
+    var showEditProfile by remember { mutableStateOf(false) }
+    var showChangePassword by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         viewModel.effects.collect { effect ->
@@ -117,6 +127,26 @@ fun SettingsScreen(
             }
         )
     }
+    if (showEditProfile) {
+        EditProfileDialog(
+            currentUsername = state.user?.username.orEmpty(),
+            currentEmail = state.user?.email.orEmpty(),
+            onDismiss = { showEditProfile = false },
+            onConfirm = { newUsername, newEmail ->
+                viewModel.onUpdateProfile(newUsername, newEmail)
+                showEditProfile = false
+            }
+        )
+    }
+    if (showChangePassword) {
+        ChangePasswordDialog(
+            onDismiss = { showChangePassword = false },
+            onConfirm = { current, new ->
+                viewModel.onChangePassword(current, new)
+                showChangePassword = false
+            }
+        )
+    }
 
     val scroll = rememberScrollState()
     Surface(color = palette.bg, modifier = Modifier.fillMaxSize()) {
@@ -140,28 +170,36 @@ fun SettingsScreen(
                     onLogout = viewModel::onLogout
                 )
 
-                ProfileSection(title = "Внешний вид", subtitle = null) {
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        FieldRow(label = "Тема") {
-                            SegmentedTabsEqual(
-                                options = ThemeMode.entries.map { it.label },
-                                selectedIndex = ThemeMode.entries.indexOf(state.settings.themeMode),
-                                onSelected = { viewModel.onSetThemeMode(ThemeMode.entries[it]) },
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        }
+                ProfileSection(title = "Аккаунт", subtitle = null) {
+                    Column {
+                        AccountActionRow(
+                            icon = Icons.Default.Person,
+                            title = "Изменить профиль",
+                            subtitle = null,
+                            enabled = state.user != null,
+                            onClick = { showEditProfile = true }
+                        )
                         HorizontalDivider(color = palette.line)
-                        FieldRow(label = "Подсказки") {
-                            Switch(
-                                checked = state.settings.tooltipsEnabled,
-                                onCheckedChange = viewModel::onSetTooltipsEnabled,
-                                colors = SwitchDefaults.colors(
-                                    checkedThumbColor = palette.bgElev,
-                                    checkedTrackColor = palette.ink,
-                                    uncheckedThumbColor = palette.bgElev,
-                                    uncheckedTrackColor = palette.line2
-                                )
+                        AccountActionRow(
+                            icon = Icons.Default.Lock,
+                            title = "Сменить пароль",
+                            subtitle = null,
+                            onClick = { showChangePassword = true }
+                        )
+                    }
+                }
+
+                ProfileSection(title = "Внешний вид", subtitle = null) {
+                    Column {
+                        ThemeMode.entries.forEachIndexed { index, mode ->
+                            ThemeModeRow(
+                                mode = mode,
+                                selected = state.settings.themeMode == mode,
+                                onSelect = { viewModel.onSetThemeMode(mode) }
                             )
+                            if (index < ThemeMode.entries.lastIndex) {
+                                HorizontalDivider(color = palette.line)
+                            }
                         }
                     }
                 }
@@ -205,57 +243,23 @@ fun SettingsScreen(
 
                 if (state.parameters.isNotEmpty()) {
                     ProfileSection(title = "Параметры", subtitle = null) {
+                        // Группировка по name. Если у группы несколько датчиков —
+                        // блок раскрывается, и каждый датчик скрывается/показывается
+                        // отдельно. Можно переключить всю группу одним тапом по
+                        // главной строке.
+                        val grouped = remember(state.parameters) {
+                            val byName = LinkedHashMap<String, MutableList<com.shestikpetr.meteoapp.domain.model.ParameterMeta>>()
+                            state.parameters.forEach { p -> byName.getOrPut(p.name) { mutableListOf() }.add(p) }
+                            byName.values.toList()
+                        }
                         Column {
-                            state.parameters.forEachIndexed { index, param ->
-                                val isHidden = param.code in state.settings.hiddenParameters
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable { viewModel.onToggleParameterHidden(param.code) }
-                                        .padding(vertical = 10.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Text(
-                                                text = param.name,
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                color = if (isHidden) palette.ink3 else palette.ink,
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis,
-                                                modifier = Modifier.weight(1f, fill = false)
-                                            )
-                                            param.unit?.takeIf { it.isNotBlank() }?.let { unit ->
-                                                Spacer(Modifier.width(8.dp))
-                                                Text(
-                                                    text = unit,
-                                                    style = MeteoTextStyles.MonoSmall,
-                                                    color = palette.ink4,
-                                                    maxLines = 1,
-                                                    overflow = TextOverflow.Ellipsis
-                                                )
-                                            }
-                                        }
-                                        param.description?.takeIf { it.isNotBlank() }?.let { desc ->
-                                            Text(
-                                                text = desc,
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = palette.ink3,
-                                                maxLines = 2,
-                                                overflow = TextOverflow.Ellipsis,
-                                                modifier = Modifier.padding(top = 2.dp)
-                                            )
-                                        }
-                                    }
-                                    Icon(
-                                        imageVector = if (isHidden) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                        contentDescription = if (isHidden) "Скрыт" else "Виден",
-                                        tint = if (isHidden) palette.ink4 else palette.ink2,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
-                                if (index < state.parameters.size - 1) {
+                            grouped.forEachIndexed { index, group ->
+                                ParameterHideRow(
+                                    group = group,
+                                    hidden = state.settings.hiddenParameters,
+                                    onToggle = viewModel::onToggleParameterHidden
+                                )
+                                if (index < grouped.size - 1) {
                                     HorizontalDivider(color = palette.line)
                                 }
                             }
@@ -440,49 +444,253 @@ private fun ProfileSection(
 }
 
 /**
- * Лейбл слева + компактный контент справа (Switch, Checkbox и т.п.).
- * Используется только для контролов фиксированного размера, которые
- * прижимаются к правому краю.
+ * Строка-действие в секции «Аккаунт». Иконка слева, заголовок + подпись,
+ * шеврон справа. По тапу открывается соответствующий диалог.
  */
 @Composable
-private fun FieldRow(
-    label: String,
-    content: @Composable () -> Unit
+private fun AccountActionRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    subtitle: String?,
+    enabled: Boolean = true,
+    onClick: () -> Unit
 ) {
     val palette = MaterialTheme.appColors
     Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
-            color = palette.ink2,
-            modifier = Modifier.weight(1f)
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = if (enabled) palette.ink2 else palette.ink4,
+            modifier = Modifier.size(20.dp)
         )
-        content()
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                color = if (enabled) palette.ink else palette.ink3,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            subtitle?.let {
+                Text(
+                    text = it,
+                    style = MeteoTextStyles.MonoSmall,
+                    color = palette.ink4,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+        Icon(
+            imageVector = Icons.Default.ChevronRight,
+            contentDescription = null,
+            tint = palette.ink3,
+            modifier = Modifier.size(18.dp)
+        )
     }
 }
 
 /**
- * Лейбл сверху + контент во всю ширину снизу. Подходит для широких контролов
- * вроде SegmentedTabsEqual, которые не помещаются справа от лейбла.
+ * Строка выбора темы. Радио слева, заголовок темы справа. Вся строка
+ * кликабельна и выступает как один элемент группы radio.
  */
 @Composable
-private fun StackedFieldRow(
-    label: String,
-    content: @Composable () -> Unit
+private fun ThemeModeRow(
+    mode: ThemeMode,
+    selected: Boolean,
+    onSelect: () -> Unit
 ) {
     val palette = MaterialTheme.appColors
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
-            color = palette.ink2
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .selectable(
+                selected = selected,
+                onClick = onSelect,
+                role = Role.RadioButton
+            )
+            .padding(vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        RadioButton(
+            selected = selected,
+            onClick = null,
+            colors = RadioButtonDefaults.colors(
+                selectedColor = palette.ink,
+                unselectedColor = palette.line2
+            )
         )
-        Spacer(Modifier.height(8.dp))
-        content()
+        Text(
+            text = mode.label,
+            style = MaterialTheme.typography.bodyMedium.copy(
+                fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal
+            ),
+            color = if (selected) palette.ink else palette.ink2
+        )
+    }
+}
+
+/**
+ * Строка-параметр в Настройках. Если в группе один параметр — обычная строка
+ * с глазиком, по тапу скрывается/показывается. Если несколько — раскрывается
+ * по тапу на тело строки, а глаз справа переключает группу целиком: если хотя бы
+ * один датчик группы скрыт, тап делает все видимыми; если все видимы — все скрытыми.
+ */
+@Composable
+private fun ParameterHideRow(
+    group: List<com.shestikpetr.meteoapp.domain.model.ParameterMeta>,
+    hidden: Set<Int>,
+    onToggle: (Int) -> Unit
+) {
+    val palette = MaterialTheme.appColors
+    val first = group.first()
+    val isGroup = group.size > 1
+    val anyHidden = group.any { it.code in hidden }
+    val allHidden = group.all { it.code in hidden }
+    var expanded by androidx.compose.runtime.saveable.rememberSaveable(first.name) {
+        androidx.compose.runtime.mutableStateOf(false)
+    }
+
+    Column {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable {
+                    if (isGroup) expanded = !expanded
+                    else onToggle(first.code)
+                }
+                .padding(vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = first.name,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (allHidden) palette.ink3 else palette.ink,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                    if (isGroup) {
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = "${group.size}",
+                            style = MeteoTextStyles.MonoSmall,
+                            color = palette.ink4
+                        )
+                    } else {
+                        first.unit?.takeIf { it.isNotBlank() }?.let { unit ->
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                text = unit,
+                                style = MeteoTextStyles.MonoSmall,
+                                color = palette.ink4,
+                                maxLines = 1
+                            )
+                        }
+                    }
+                }
+                if (!isGroup) {
+                    first.description?.takeIf { it.isNotBlank() }?.let { desc ->
+                        Text(
+                            text = desc,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = palette.ink3,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(top = 2.dp)
+                        )
+                    }
+                }
+            }
+            if (isGroup) {
+                Icon(
+                    imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                    contentDescription = if (expanded) "Свернуть" else "Развернуть",
+                    tint = palette.ink3,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(Modifier.width(8.dp))
+                IconButton(
+                    onClick = {
+                        // Если хотя бы один скрыт — открываем все; иначе скрываем все.
+                        val targetHide = !allHidden
+                        group.forEach { p ->
+                            val isHiddenNow = p.code in hidden
+                            if (isHiddenNow != targetHide) onToggle(p.code)
+                        }
+                    },
+                    modifier = Modifier.size(28.dp)
+                ) {
+                    Icon(
+                        imageVector = if (allHidden) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                        contentDescription = if (allHidden) "Показать все" else "Скрыть все",
+                        tint = if (anyHidden) palette.ink4 else palette.ink2,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            } else {
+                Icon(
+                    imageVector = if (allHidden) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                    contentDescription = if (allHidden) "Скрыт" else "Виден",
+                    tint = if (allHidden) palette.ink4 else palette.ink2,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+        }
+        if (isGroup) {
+            androidx.compose.animation.AnimatedVisibility(visible = expanded) {
+                Column(modifier = Modifier.padding(start = 12.dp, bottom = 4.dp)) {
+                    group.forEach { p ->
+                        val ph = p.code in hidden
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onToggle(p.code) }
+                                .padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = p.description?.takeIf { it.isNotBlank() } ?: "Датчик #${p.code}",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = if (ph) palette.ink3 else palette.ink,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.weight(1f, fill = false)
+                                    )
+                                    p.unit?.takeIf { it.isNotBlank() }?.let { unit ->
+                                        Spacer(Modifier.width(8.dp))
+                                        Text(
+                                            text = unit,
+                                            style = MeteoTextStyles.MonoSmall,
+                                            color = palette.ink4,
+                                            maxLines = 1
+                                        )
+                                    }
+                                }
+                            }
+                            Icon(
+                                imageVector = if (ph) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                contentDescription = if (ph) "Скрыт" else "Виден",
+                                tint = if (ph) palette.ink4 else palette.ink2,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
